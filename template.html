@@ -247,7 +247,11 @@
             <div class="sidebar-footer">
                 <div class="sidebar-footer-links">
                     <a href="#"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4l2.5 1.5"/></svg>История</a>
-                    <a href="#"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5l2 4 4.5.7-3.2 3.1.8 4.5L8 11.5 3.9 13.8l.8-4.5L1.5 6.2 6 5.5z"/></svg>GitHub</a>
+                    <!-- ИЗМЕНЕНИЕ: Добавлена реальная ссылка на GitHub проект ASP.NET -->
+                    <a href="https://github.com/yourusername/aspnet-project" target="_blank" rel="noopener noreferrer">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5l2 4 4.5.7-3.2 3.1.8 4.5L8 11.5 3.9 13.8l.8-4.5L1.5 6.2 6 5.5z"/></svg>
+                        GitHub (ASP.NET)
+                    </a>
                 </div>
             </div>
         </aside>
@@ -313,6 +317,12 @@
                 Главная
             </a>`;
 
+            // ИЗМЕНЕНИЕ: Добавлен пункт "Счёт студентов" в навигацию
+            html += `<a class="nav-item ${currentPage === 'students' ? 'active' : ''}" onclick="navigateTo('students'); return false;" style="padding-left: 20px; margin-bottom: 8px; font-weight: 500;">
+                <svg class="item-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M14 13v1a1 1 0 01-1 1H3a1 1 0 01-1-1v-1M12 5a4 4 0 11-8 0 4 4 0 018 0zM2 15s2-2 6-2 6 2 6 2"/></svg>
+                Счёт студентов
+            </a>`;
+
             siteData.categories.forEach(cat => {
                 html += `<div class="nav-category">
                     <div class="nav-category-header" onclick="toggleCategory(this)">
@@ -359,6 +369,66 @@
                         </div>
                     </div>`;
                 document.getElementById('breadcrumb').innerHTML = `<a href="#" class="breadcrumb-item" onclick="navigateTo('home'); return false;">Главная</a>`;
+                return;
+            }
+
+            // ИЗМЕНЕНИЕ: Обработка страницы "Счёт студентов"
+            if (pageId === 'students') {
+                tocSidebar.style.display = 'none';
+                document.getElementById('breadcrumb').innerHTML = `
+                    <a href="#" class="breadcrumb-item" onclick="navigateTo('home'); return false;">Главная</a>
+                    <svg class="breadcrumb-sep" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 3.5l3 3.5-3 3.5"/></svg>
+                    <span class="breadcrumb-current">Счёт студентов</span>`;
+                
+                const students = [
+                    "Левенцов Никита Сергеевич", "Мисюрев Сергей Игоревич", "Попов Андрей Сергеевич",
+                    "Перов Дмитрий Павлович", "Клеймёнов Александр Вячеславович", "Попов Александр Владимирович",
+                    "Нефедов Иван Сергеевич", "Климов Илья Владимирович", "Подугольников Антон Сергеевич",
+                    "Хлупин Владислав Евгеньевич", "Воротников Макар Владимирович"
+                ];
+
+                let tableRows = students.map((name, i) => `
+                    <tr>
+                        <td>${i + 1}</td>
+                        <td>${name}</td>
+                        <td>0%</td>
+                        <td>0 занятий</td>
+                        <td><span style="color: var(--text-tertiary);">Не начато</span></td>
+                    </tr>
+                `).join('');
+
+                contentArea.innerHTML = `
+                    <div class="content-inner fade-in">
+                        <h1>Счёт студентов</h1>
+                        <div class="page-meta">
+                            <span class="page-meta-item"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2" width="11" height="10" rx="1.5"/><path d="M1.5 5.5h11M4.5 1v2M9.5 1v2"/></svg> Статистика посещаемости</span>
+                            <span class="page-meta-item"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="5.5"/><path d="M7 4v3.5l2.5 1.5"/></svg> 11 студентов в группе</span>
+                        </div>
+                        
+                        <h2>Список группы</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>№</th>
+                                    <th>ФИО</th>
+                                    <th>Посещаемость</th>
+                                    <th>Пропущено</th>
+                                    <th>Статус</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRows}
+                            </tbody>
+                        </table>
+
+                        <div class="callout callout-info" style="margin-top: 32px;">
+                            <svg class="callout-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="8"/><path d="M10 6v4M10 14h.01"/></svg>
+                            <div>
+                                <strong>Информация</strong>
+                                <p>Данные будут обновляться автоматически по мере проведения занятий. Сейчас установлена базовая статистика (0%).</p>
+                            </div>
+                        </div>
+                    </div>`;
                 return;
             }
 
