@@ -2001,25 +2001,6 @@
                 });
             }
 
-            const recentItems = recentPages
-                .filter(id => !pinnedPages.includes(id))
-                .slice(0, 5)
-                .map(id => {
-                    for (const cat of siteData.categories) {
-                        const p = cat.pages.find(x => x.id === id);
-                        if (p) return { page: p, cat };
-                    }
-                    return null;
-                })
-                .filter(Boolean);
-
-            if (recentItems.length > 0) {
-                html += '<div class="nav-section-label">Недавние</div>';
-                recentItems.forEach(({page}) => {
-                    html += renderNavItem(page, true);
-                });
-            }
-
             html += '<a class="nav-item ' + (currentPage === 'home' ? 'active' : '') + '" style="padding-left:10px;margin-bottom:2px;' + (pinnedItems.length || recentItems.length ? 'margin-top:8px;' : '') + '" onclick="navigateTo(\'home\');return false;">' + ICONS.home + '<span class="item-text">Главная</span></a>';
             html += '<a class="nav-item ' + (currentPage === 'students' ? 'active' : '') + '" style="padding-left:10px;margin-bottom:8px;" onclick="navigateTo(\'students\');return false;">' + ICONS.stats + '<span class="item-text">Статистика</span></a>';
 
