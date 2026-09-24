@@ -63,6 +63,8 @@ const NICKNAMES = {
     'андрей': 'Попов Андрей Сергеевич',
     'андрюха': 'Попов Андрей Сергеевич',
     'попов андрей': 'Попов Андрей Сергеевич',
+    'саня п': 'Попов Андрей Сергеевич',
+    'саня п.': 'Попов Андрей Сергеевич',
 
     // Перов Дмитрий Павлович
     'дима': 'Перов Дмитрий Павлович',
@@ -72,17 +74,15 @@ const NICKNAMES = {
 
     // Клеймёнов Александр Вячеславович
     'саша к': 'Клеймёнов Александр Вячеславович',
+    'саша к.': 'Клеймёнов Александр Вячеславович',
     'сашка к': 'Клеймёнов Александр Вячеславович',
     'клеймёнов': 'Клеймёнов Александр Вячеславович',
     'клейменов': 'Клеймёнов Александр Вячеславович',
     'клём': 'Клеймёнов Александр Вячеславович',
-    'александр вячеславович': 'Клеймёнов Александр Вячеславович',
 
     // Попов Александр Владимирович
-    'саша п': 'Попов Александр Владимирович',
-    'сашка п': 'Попов Александр Владимирович',
     'попов александр': 'Попов Александр Владимирович',
-    'александр владимирович': 'Попов Александр Владимирович',
+    'попов саша': 'Попов Александр Владимирович',
 
     // Нефедов Иван Сергеевич
     'ваня': 'Нефедов Иван Сергеевич',
@@ -95,6 +95,7 @@ const NICKNAMES = {
     'илюха': 'Климов Илья Владимирович',
     'илюш': 'Климов Илья Владимирович',
     'климов': 'Климов Илья Владимирович',
+    'саня к': 'Климов Илья Владимирович', // если путают имя
 
     // Подугольников Антон Сергеевич
     'антон': 'Подугольников Антон Сергеевич',
@@ -273,16 +274,24 @@ function processFile(file, usedIds) {
     const raw = fs.readFileSync(file.abs, 'utf-8');
     const { meta, content: body } = parseFrontmatter(raw);
 
-    // Извлекаем присутствующих ДО замены местоимений (чтобы "я" в списке тоже распозналось)
+    // 1. Извлекаем присутствующих ДО замены местоимений (чтобы "я" в списке тоже распозналось)
     const students = extractAttendees(body);
 
-    // Заменяем "Я/я" → "Никита" в основном тексте
+    // 2. Извлекаем H1 для заголовка ДО удаления
+    const h1Match = body.match(/^#\s+(.+)$/m);
+    const h1Title = h1Match ? h1Match[1].trim() : null;
+
+    // 3. Заменяем "Я/я" → "Никита" в основном тексте
     const processed = replacePronouns(body);
-    // Удаляем первый H1 чтобы не дублировался с тем, что вставит шаблон
+
+    // 4. Удаляем первый H1 чтобы не дублировался с тем, что вставит шаблон
     const processedNoH1 = processed.replace(/^#\s+.+$/m, '').trim();
 
     const category = resolveCategory(meta, file.rel);
-    const title = resolveTitle(meta, processedNoH1, file.rel, category);
+
+    // 5. Используем H1 из оригинала, если он был, иначе fallback на имя файла
+    const title = meta.title || h1Title || resolveTitle(meta, processedNoH1, file.rel, category);
+
     const date = resolveDate(meta, raw, file.rel);
 
     marked.setOptions({ gfm: true, breaks: false });
@@ -307,17 +316,17 @@ function processFile(file, usedIds) {
  */
 function matchStudent(name) {
     const clean = name.trim().toLowerCase();
-    
+
     // 1. Точное совпадение в словаре сокращений
     if (NICKNAMES[clean]) {
         return NICKNAMES[clean];
     }
-    
+
     // 2. Частичное совпадение по словам
     const nParts = clean.split(/\s+/).filter(Boolean);
     let best = null;
     let bestScore = 0;
-    
+
     for (const s of STUDENTS) {
         const sParts = s.toLowerCase().split(/\s+/);
         const score = nParts.filter(p => sParts.includes(p)).length;
@@ -326,7 +335,7 @@ function matchStudent(name) {
             best = s;
         }
     }
-    
+
     return bestScore >= 1 ? best : null;
 }
 
@@ -362,11 +371,11 @@ function buildDist(siteData, attendanceData) {
     }
 
     let html = fs.readFileSync(srcHtml, 'utf-8');
-    
+
     // Вшиваем данные
-    html = html.replace(/^([ \t]*)window\.siteData\s*=.*$/m, 
+    html = html.replace(/^([ \t]*)window\.siteData\s*=.*$/m,
         (m, sp) => sp + 'window.siteData = ' + JSON.stringify(siteData) + ';');
-    html = html.replace(/^([ \t]*)window\.attendanceData\s*=.*$/m, 
+    html = html.replace(/^([ \t]*)window\.attendanceData\s*=.*$/m,
         (m, sp) => sp + 'window.attendanceData = ' + JSON.stringify(attendanceData) + ';');
 
     // Пишем итоговый index.html в dist
@@ -383,7 +392,7 @@ function main() {
     console.log('🔨 Начинаю сборку конспектов...\n');
 
     const found = findNotes();
-    
+
     let pages = [];
     let siteData = { categories: [] };
     let attendanceData = { students: [], totalLessons: 0 };
@@ -391,24 +400,24 @@ function main() {
     if (!found) {
         console.warn('⚠️  Markdown-конспекты не найдены.');
         console.warn('   Проверены папки: ' + CANDIDATE_DIRS.join(', ') + ' и корень.');
-        
+
         // Пытаемся взять старые данные из шаблона
         let srcHtml = path.join(ROOT, 'template.html');
         if (!fs.existsSync(srcHtml)) srcHtml = path.join(ROOT, 'index.html');
-        
+
         if (fs.existsSync(srcHtml)) {
              const html = fs.readFileSync(srcHtml, 'utf-8');
              const m1 = html.match(/window\.siteData\s*=\s*({[\s\S]*?});/);
              const m2 = html.match(/window\.attendanceData\s*=\s*({[\s\S]*?});/);
              if (m1) try { siteData = JSON.parse(m1[1]); } catch(e){}
              if (m2) try { attendanceData = JSON.parse(m2[1]); } catch(e){}
-             
+
              if (siteData.categories.length > 0) {
                  console.log('   ✅ Найдены старые данные в шаблоне, использую их.');
              }
         }
     } else {
-        console.log(` Папка с конспектами: ${path.relative(ROOT, found.dir) || '(корень)'}`);
+        console.log(`📂 Папка с конспектами: ${path.relative(ROOT, found.dir) || '(корень)'}`);
         console.log(`📄 Найдено файлов: ${found.files.length}\n`);
 
         const usedIds = new Set();
