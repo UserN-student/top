@@ -5,17 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#09090b">
     <title>Конспекты 4-го курса</title>
-    <link rel="manifest" href='data:application/manifest+json,{"name":"Конспекты","short_name":"Конспекты","start_url":".","display":"standalone","background_color":"%2309090b","theme_color":"%2309090b","icons":[{"src":"data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%233b82f6%22><rect width=%2224%22 height=%2224%22 rx=%225%22/><path d=%22M7 8h10M7 12h7M7 16h9%22 stroke=%22white%22 stroke-width=%221.5%22 stroke-linecap=%22round%22/></svg>","sizes":"any","type":"image/svg+xml"}]}'>
+    <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='5' fill='%233b82f6'/><path d='M7 8h10M7 12h7M7 16h9' stroke='white' stroke-width='1.5' stroke-linecap='round'/></svg>">
     <link href="https://cdn.jsdelivr.net/fontsource/css/inter@latest/index.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/fontsource/css/jetbrains-mono@latest/index.css" rel="stylesheet">
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
-            --ease: cubic-bezier(0.22, 1, 0.36, 1);
-            --t-fast: 0.18s;
-            --t-med: 0.3s;
-            --t-slow: 0.45s;
+            --ease: cubic-bezier(0.25, 0.8, 0.25, 1);
+            --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+            --t-fast: 0.22s;
+            --t-med: 0.38s;
+            --t-slow: 0.55s;
 
             --bg-primary: #09090b;
             --bg-secondary: #0f0f11;
@@ -106,14 +107,17 @@
 
         .sidebar-header { padding: 18px 18px 14px; border-bottom: 1px solid var(--border-primary); flex-shrink: 0; }
 
-        .sidebar-logo { display: flex; align-items: center; gap: 11px; text-decoration: none; color: var(--text-accent); margin-bottom: 16px; cursor: pointer; }
+        .sidebar-logo { display: flex; align-items: center; gap: 11px; text-decoration: none; color: var(--text-accent); margin-bottom: 16px; cursor: pointer; transition: opacity var(--t-fast) var(--ease); }
+        .sidebar-logo:hover { opacity: 0.85; }
         .sidebar-logo-icon {
             width: 32px; height: 32px; border-radius: 9px;
             background: var(--accent);
             display: flex; align-items: center; justify-content: center;
             box-shadow: 0 3px 10px var(--accent-glow);
             flex-shrink: 0;
+            transition: transform var(--t-med) var(--ease);
         }
+        .sidebar-logo:hover .sidebar-logo-icon { transform: scale(1.05); }
         .sidebar-logo-icon svg { width: 17px; height: 17px; color: #fff; }
         .sidebar-logo-text { font-size: 15px; font-weight: 650; letter-spacing: -0.3px; flex: 1; }
         .sidebar-logo-version { font-size: 10.5px; color: var(--text-muted); background: var(--bg-tertiary); border: 1px solid var(--border-primary); padding: 3px 7px; border-radius: 6px; font-weight: 600; }
@@ -142,7 +146,6 @@
             padding: 2px 6px; border-radius: 5px; font-weight: 600; pointer-events: none;
         }
 
-        /* Фильтры категорий */
         .sidebar-filters {
             padding: 8px 14px 12px;
             border-bottom: 1px solid var(--border-primary);
@@ -166,7 +169,7 @@
             transition: all var(--t-fast) var(--ease);
             user-select: none;
         }
-        .filter-chip:hover { border-color: var(--border-secondary); color: var(--text-primary); }
+        .filter-chip:hover { border-color: var(--border-secondary); color: var(--text-primary); transform: translateY(-1px); }
         .filter-chip.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent-2); }
         .filter-chip svg { width: 11px; height: 11px; }
 
@@ -251,13 +254,13 @@
             border-bottom: 1px solid var(--border-primary);
             position: relative;
         }
-        .reading-progress { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0%; background: var(--accent); transition: width 0.12s linear; z-index: 5; }
+        .reading-progress { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0%; background: var(--accent); transition: width 0.15s linear; z-index: 5; }
 
         .topbar-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
         .breadcrumb { display: flex; align-items: center; gap: 7px; font-size: 13px; min-width: 0; position: relative; }
         .breadcrumb-item {
             color: var(--text-tertiary); text-decoration: none; font-weight: 500; white-space: nowrap;
-            transition: color var(--t-fast) var(--ease);
+            transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
             cursor: pointer;
             display: inline-flex;
             align-items: center;
@@ -273,7 +276,9 @@
             background-size: contain;
             background-repeat: no-repeat;
             margin-left: 2px;
+            transition: transform var(--t-fast) var(--ease);
         }
+        .breadcrumb-item.has-dropdown.open::after { transform: rotate(180deg); }
         .breadcrumb-sep { width: 13px; height: 13px; color: var(--text-muted); opacity: 0.6; flex-shrink: 0; }
         .breadcrumb-current { color: var(--text-primary); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
 
@@ -291,10 +296,12 @@
             box-shadow: var(--shadow-lg);
             padding: 6px;
             z-index: 200;
-            display: none;
-            animation: dropdownIn 0.15s var(--ease);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-6px);
+            transition: opacity var(--t-med) var(--ease), transform var(--t-med) var(--ease), visibility var(--t-med) var(--ease);
         }
-        .breadcrumb-dropdown.open { display: block; }
+        .breadcrumb-dropdown.open { opacity: 1; visibility: visible; transform: translateY(0); }
         .breadcrumb-dropdown a {
             display: block;
             padding: 8px 12px;
@@ -307,9 +314,8 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        .breadcrumb-dropdown a:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .breadcrumb-dropdown a:hover { background: var(--bg-hover); color: var(--text-primary); transform: translateX(2px); }
         .breadcrumb-dropdown a.current { background: var(--accent-dim); color: var(--text-accent); font-weight: 550; }
-        @keyframes dropdownIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 
         .topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
         .topbar-btn {
@@ -320,7 +326,8 @@
             transition: all var(--t-fast) var(--ease);
             position: relative;
         }
-        .topbar-btn:hover { color: var(--text-primary); border-color: var(--border-secondary); background: var(--bg-hover); }
+        .topbar-btn:hover { color: var(--text-primary); border-color: var(--border-secondary); background: var(--bg-hover); transform: translateY(-1px); }
+        .topbar-btn:active { transform: translateY(0); }
         .topbar-btn svg { width: 17px; height: 17px; }
         .topbar-btn .kbd-hint {
             position: absolute;
@@ -380,7 +387,7 @@
             margin-left: 8px;
             color: var(--text-muted);
             opacity: 0;
-            transition: opacity var(--t-fast) var(--ease);
+            transition: opacity var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
             font-size: 0.8em;
             font-weight: 400;
             text-decoration: none;
@@ -422,7 +429,7 @@
             cursor: zoom-in;
             transition: transform var(--t-med) var(--ease), box-shadow var(--t-med) var(--ease);
         }
-        .content-area img:hover { box-shadow: var(--shadow-md); }
+        .content-area img:hover { box-shadow: var(--shadow-md); transform: scale(1.005); }
 
         /* ================= CODE BLOCKS ================= */
         .code-wrapper {
@@ -459,15 +466,23 @@
         .code-tool-btn svg { width: 12px; height: 12px; }
 
         .code-search-wrap {
-            display: none;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 10px;
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows var(--t-med) var(--ease);
             background: var(--bg-code-header);
             border-left: 1px solid var(--border-primary);
             border-right: 1px solid var(--border-primary);
         }
-        .code-search-wrap.open { display: flex; }
+        .code-search-wrap.open { grid-template-rows: 1fr; }
+        .code-search-inner {
+            overflow: hidden;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 0 10px;
+        }
+        .code-search-wrap.open .code-search-inner { padding: 6px 10px; }
         .code-search-input {
             flex: 1;
             padding: 5px 10px;
@@ -478,6 +493,7 @@
             font-family: 'JetBrains Mono', monospace;
             font-size: 12px;
             outline: none;
+            transition: border-color var(--t-fast) var(--ease);
         }
         .code-search-input:focus { border-color: var(--accent); }
         .code-search-info { font-size: 11px; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; }
@@ -489,6 +505,7 @@
             padding: 2px 6px;
             font-size: 16px;
             line-height: 1;
+            transition: color var(--t-fast) var(--ease);
         }
         .code-search-close:hover { color: var(--text-primary); }
 
@@ -536,10 +553,42 @@
             opacity: 0.6;
         }
 
+        /* Collapsible code with smooth animation */
+        .code-collapse-wrap {
+            display: grid;
+            grid-template-rows: 1fr;
+            transition: grid-template-rows var(--t-slow) var(--ease);
+        }
+        .code-collapse-wrap.collapsed { grid-template-rows: 0fr; }
+        .code-collapse-clip {
+            overflow: hidden;
+            min-height: 0;
+            position: relative;
+        }
+        .code-collapse-clip pre {
+            transition: max-height var(--t-slow) var(--ease);
+        }
+        .code-collapse-wrap.collapsed .code-collapse-clip pre {
+            max-height: 360px;
+        }
+        .code-collapse-wrap.collapsed .code-collapse-clip::after {
+            content: '';
+            position: absolute;
+            left: 0; right: 0; bottom: 0;
+            height: 100px;
+            background: linear-gradient(to bottom, transparent, var(--bg-code-block));
+            pointer-events: none;
+            border-radius: 0 0 12px 12px;
+            transition: opacity var(--t-med) var(--ease);
+        }
+        .code-collapse-wrap:not(.collapsed) .code-collapse-clip::after {
+            opacity: 0;
+        }
+
         .code-collapse-btn {
             display: none;
             width: 100%;
-            padding: 8px;
+            padding: 9px;
             background: var(--bg-tertiary);
             border: 1px solid var(--border-primary);
             border-top: none;
@@ -553,15 +602,6 @@
         }
         .code-collapse-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
         .code-wrapper.collapsible .code-collapse-btn { display: block; }
-        .code-wrapper.collapsed pre { max-height: 360px; overflow: hidden; position: relative; }
-        .code-wrapper.collapsed pre::after {
-            content: '';
-            position: absolute;
-            left: 0; right: 0; bottom: 0;
-            height: 80px;
-            background: linear-gradient(to bottom, transparent, var(--bg-code-block));
-            pointer-events: none;
-        }
 
         .code-search-match { background: rgba(251, 191, 36, 0.35); color: #fff; border-radius: 2px; padding: 0 1px; }
         .code-search-match.current { background: var(--accent); }
@@ -621,11 +661,13 @@
             font-size: 12.5px; line-height: 1.5; font-weight: 450;
             color: var(--text-tertiary); text-decoration: none;
             border-left: 2px solid var(--border-primary);
-            transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+            transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), padding var(--t-fast) var(--ease);
         }
-        .toc-list a:hover { color: var(--text-secondary); border-left-color: var(--border-accent); }
-        .toc-list a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 550; }
+        .toc-list a:hover { color: var(--text-secondary); border-left-color: var(--border-accent); padding-left: 14px; }
+        .toc-list a.active { color: var(--accent); border-left-color: var(--accent); font-weight: 550; padding-left: 14px; }
         .toc-list .toc-h3 { padding-left: 26px; }
+        .toc-list .toc-h3:hover { padding-left: 28px; }
+        .toc-list .toc-h3.active { padding-left: 28px; }
 
         /* Mobile sticky TOC button */
         .mobile-toc-btn {
@@ -646,7 +688,7 @@
             justify-content: center;
             transition: all var(--t-med) var(--ease);
         }
-        .mobile-toc-btn:hover { color: var(--text-primary); border-color: var(--border-accent); }
+        .mobile-toc-btn:hover { color: var(--text-primary); border-color: var(--border-accent); transform: translateY(-2px); }
         .mobile-toc-btn svg { width: 17px; height: 17px; }
 
         .mobile-toc-panel {
@@ -664,14 +706,14 @@
             z-index: 81;
             opacity: 0;
             visibility: hidden;
-            transform: translateY(10px);
+            transform: translateY(10px) scale(0.96);
             transition: all var(--t-med) var(--ease);
         }
         .mobile-toc-panel.open { opacity: 1; visibility: visible; transform: none; }
         .mobile-toc-panel .toc-title { padding-left: 0; margin-bottom: 10px; }
         .mobile-toc-panel .toc-list a { padding: 7px 10px; border-radius: 6px; border-left: none; margin-bottom: 2px; }
-        .mobile-toc-panel .toc-list a:hover { background: var(--bg-hover); }
-        .mobile-toc-panel .toc-list a.active { background: var(--accent-dim); }
+        .mobile-toc-panel .toc-list a:hover { background: var(--bg-hover); padding-left: 12px; }
+        .mobile-toc-panel .toc-list a.active { background: var(--accent-dim); padding-left: 12px; }
 
         /* ================= SEARCH MODAL ================= */
         .search-modal-overlay {
@@ -693,9 +735,10 @@
             box-shadow: var(--shadow-lg);
             overflow: hidden;
             transform: scale(0.97) translateY(-10px);
-            transition: transform var(--t-med) var(--ease);
+            opacity: 0;
+            transition: transform var(--t-med) var(--ease), opacity var(--t-med) var(--ease);
         }
-        .search-modal-overlay.active .search-modal { transform: scale(1) translateY(0); }
+        .search-modal-overlay.active .search-modal { transform: scale(1) translateY(0); opacity: 1; }
 
         .search-modal-input-wrap { display: flex; align-items: center; gap: 12px; padding: 0 18px; border-bottom: 1px solid var(--border-primary); }
         .search-modal-input-wrap svg { width: 19px; height: 19px; color: var(--text-tertiary); flex-shrink: 0; }
@@ -704,8 +747,8 @@
 
         .search-results { max-height: min(430px, 58vh); overflow-y: auto; padding: 10px; }
         .search-result-group { padding: 10px 10px 6px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-tertiary); }
-        .search-result-item { display: flex; align-items: flex-start; gap: 11px; padding: 10px 12px; border-radius: 10px; cursor: pointer; transition: background var(--t-fast) var(--ease); }
-        .search-result-item:hover, .search-result-item.selected { background: var(--bg-hover); }
+        .search-result-item { display: flex; align-items: flex-start; gap: 11px; padding: 10px 12px; border-radius: 10px; cursor: pointer; transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease); }
+        .search-result-item:hover, .search-result-item.selected { background: var(--bg-hover); transform: translateX(2px); }
         .search-result-item > svg { width: 16px; height: 16px; color: var(--text-tertiary); flex-shrink: 0; margin-top: 2px; }
         .result-body { min-width: 0; flex: 1; }
         .result-title { font-size: 14px; font-weight: 550; color: var(--text-primary); }
@@ -728,14 +771,16 @@
             border: 1px solid var(--border-secondary);
             border-radius: 10px;
             padding: 8px 10px;
-            display: none;
+            display: flex;
             align-items: center;
             gap: 8px;
             box-shadow: var(--shadow-md);
-            animation: slideDown 0.2s var(--ease);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-8px);
+            transition: all var(--t-med) var(--ease);
         }
-        .page-search-bar.active { display: flex; }
-        @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+        .page-search-bar.active { opacity: 1; visibility: visible; transform: translateY(0); }
         .page-search-bar input {
             background: var(--bg-tertiary);
             border: 1px solid var(--border-primary);
@@ -746,6 +791,7 @@
             font-family: inherit;
             outline: none;
             width: 200px;
+            transition: border-color var(--t-fast) var(--ease);
         }
         .page-search-bar input:focus { border-color: var(--accent); }
         .page-search-bar .count { font-size: 11px; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; min-width: 40px; text-align: center; }
@@ -759,6 +805,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            transition: all var(--t-fast) var(--ease);
         }
         .page-search-bar button:hover { background: var(--bg-hover); color: var(--text-primary); }
         .page-search-bar button svg { width: 14px; height: 14px; }
@@ -794,10 +841,11 @@
             border-radius: 16px;
             box-shadow: var(--shadow-lg);
             overflow: hidden;
-            transform: scale(0.97);
-            transition: transform var(--t-med) var(--ease);
+            transform: scale(0.96) translateY(8px);
+            opacity: 0;
+            transition: transform var(--t-med) var(--ease), opacity var(--t-med) var(--ease);
         }
-        .modal-overlay.active .modal { transform: scale(1); }
+        .modal-overlay.active .modal { transform: scale(1) translateY(0); opacity: 1; }
         .modal-header {
             padding: 18px 20px;
             border-bottom: 1px solid var(--border-primary);
@@ -819,7 +867,7 @@
             justify-content: center;
             transition: all var(--t-fast) var(--ease);
         }
-        .modal-close:hover { color: var(--text-primary); border-color: var(--border-secondary); }
+        .modal-close:hover { color: var(--text-primary); border-color: var(--border-secondary); transform: rotate(90deg); }
         .modal-close svg { width: 13px; height: 13px; }
         .modal-body { padding: 20px; }
 
@@ -840,8 +888,37 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            position: relative;
+            overflow: hidden;
         }
-        .qr-code img { max-width: 100%; max-height: 100%; }
+        .qr-code img {
+            max-width: 100%;
+            max-height: 100%;
+            opacity: 0;
+            transition: opacity var(--t-med) var(--ease);
+        }
+        .qr-code img.loaded { opacity: 1; }
+        .qr-loader {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            transition: opacity var(--t-med) var(--ease);
+        }
+        .qr-loader.hidden { opacity: 0; pointer-events: none; }
+        .qr-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(59,130,246,0.15);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: qrSpin 0.8s linear infinite;
+        }
+        @keyframes qrSpin {
+            to { transform: rotate(360deg); }
+        }
         .qr-url {
             font-size: 12px;
             font-family: 'JetBrains Mono', monospace;
@@ -865,7 +942,8 @@
             font-family: inherit;
             transition: all var(--t-fast) var(--ease);
         }
-        .qr-copy-btn:hover { background: var(--accent-2); }
+        .qr-copy-btn:hover { background: var(--accent-2); transform: translateY(-1px); }
+        .qr-copy-btn:active { transform: translateY(0); }
 
         /* Help modal */
         .help-list { list-style: none; }
@@ -878,8 +956,10 @@
             border-bottom: 1px solid var(--border-primary);
             font-size: 13px;
             color: var(--text-secondary);
+            transition: transform var(--t-fast) var(--ease);
         }
         .help-list li:last-child { border-bottom: none; }
+        .help-list li:hover { transform: translateX(2px); }
         .help-list kbd {
             font-family: 'JetBrains Mono', monospace;
             font-size: 11px;
@@ -908,11 +988,12 @@
             max-height: 100%;
             object-fit: contain;
             border-radius: 8px;
-            transform: scale(0.95);
-            transition: transform var(--t-med) var(--ease);
+            transform: scale(0.9);
+            opacity: 0;
+            transition: transform var(--t-slow) var(--ease), opacity var(--t-med) var(--ease);
             cursor: default;
         }
-        .lightbox-overlay.active img { transform: scale(1); }
+        .lightbox-overlay.active img { transform: scale(1); opacity: 1; }
         .lightbox-close {
             position: absolute;
             top: 20px; right: 20px;
@@ -925,8 +1006,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            transition: all var(--t-fast) var(--ease);
         }
-        .lightbox-close:hover { background: rgba(255,255,255,0.2); }
+        .lightbox-close:hover { background: rgba(255,255,255,0.2); transform: rotate(90deg); }
         .lightbox-close svg { width: 18px; height: 18px; }
 
         /* ================= HOME / STATS ================= */
@@ -940,21 +1022,46 @@
             background: var(--accent-dim); border: 1px solid rgba(59,130,246,0.3);
             color: var(--accent-2); font-size: 12.5px; font-weight: 650;
             margin-bottom: 22px;
+            animation: badgeIn 0.6s var(--ease) backwards;
+        }
+        @keyframes badgeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: none; }
         }
         .hero-badge svg { width: 13px; height: 13px; }
-        .hero-section h1 { font-size: 44px; letter-spacing: -1.2px; margin-bottom: 14px; }
-        .hero-section > p, .hero-sub { font-size: 16.5px; color: var(--text-secondary); max-width: 540px; margin: 0 auto 44px; line-height: 1.65; }
+        .hero-section h1 { font-size: 44px; letter-spacing: -1.2px; margin-bottom: 14px; animation: titleIn 0.8s var(--ease) backwards 0.1s; }
+        @keyframes titleIn {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: none; }
+        }
+        .hero-section > p, .hero-sub { font-size: 16.5px; color: var(--text-secondary); max-width: 540px; margin: 0 auto 44px; line-height: 1.65; animation: subtitleIn 0.8s var(--ease) backwards 0.2s; }
+        @keyframes subtitleIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: none; }
+        }
         .hero-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; text-align: left; max-width: 880px; margin: 0 auto; }
         .hero-card {
             position: relative; display: block; padding: 22px;
             background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 14px;
             color: inherit; text-decoration: none; cursor: pointer; overflow: hidden;
             transition: all var(--t-med) var(--ease);
+            animation: cardIn 0.6s var(--ease) backwards;
+        }
+        .hero-card:nth-child(1) { animation-delay: 0.25s; }
+        .hero-card:nth-child(2) { animation-delay: 0.3s; }
+        .hero-card:nth-child(3) { animation-delay: 0.35s; }
+        .hero-card:nth-child(4) { animation-delay: 0.4s; }
+        .hero-card:nth-child(5) { animation-delay: 0.45s; }
+        .hero-card:nth-child(6) { animation-delay: 0.5s; }
+        @keyframes cardIn {
+            from { opacity: 0; transform: translateY(20px) scale(0.98); }
+            to { opacity: 1; transform: none; }
         }
         .hero-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--accent); opacity: 0; transition: opacity var(--t-med) var(--ease); }
         .hero-card:hover { border-color: var(--border-accent); transform: translateY(-3px); box-shadow: var(--shadow-md); }
         .hero-card:hover::before { opacity: 1; }
-        .hero-card-icon { width: 40px; height: 40px; border-radius: 10px; background: var(--accent-dim); display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+        .hero-card-icon { width: 40px; height: 40px; border-radius: 10px; background: var(--accent-dim); display: flex; align-items: center; justify-content: center; margin-bottom: 14px; transition: transform var(--t-med) var(--ease); }
+        .hero-card:hover .hero-card-icon { transform: scale(1.08); }
         .hero-card-icon svg { width: 20px; height: 20px; color: var(--accent-2); }
         .hero-card h3 { font-size: 16px; font-weight: 650; letter-spacing: -0.2px; color: var(--text-accent); margin-bottom: 6px; line-height: 1.35; }
         .hero-card .card-count { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 550; color: var(--text-muted); }
@@ -979,7 +1086,7 @@
             transition: all var(--t-med) var(--ease);
         }
         .to-top.show { opacity: 1; visibility: visible; transform: none; }
-        .to-top:hover { color: var(--text-primary); border-color: var(--border-accent); }
+        .to-top:hover { color: var(--text-primary); border-color: var(--border-accent); transform: translateY(-3px); }
         .to-top svg { width: 17px; height: 17px; }
 
         .sidebar-overlay { position: fixed; inset: 0; z-index: 99; background: rgba(5,5,8,0.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); opacity: 0; visibility: hidden; transition: opacity var(--t-med) var(--ease), visibility var(--t-med) var(--ease); }
@@ -1007,7 +1114,7 @@
             align-items: center;
             gap: 8px;
         }
-        .toast.show { opacity: 1; visibility: visible; transform: translateX(-50%) none; }
+        .toast.show { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
         .toast svg { width: 15px; height: 15px; color: var(--success); }
 
         /* Offline banner */
@@ -1024,16 +1131,17 @@
             font-weight: 550;
             text-align: center;
             z-index: 5000;
-            display: none;
+            transform: translateY(-100%);
+            transition: transform var(--t-med) var(--ease);
         }
-        .offline-banner.show { display: block; }
+        .offline-banner.show { transform: translateY(0); }
 
         /* G-key pending indicator */
         .g-indicator {
             position: fixed;
             bottom: 20px;
             left: 50%;
-            transform: translateX(-50%);
+            transform: translateX(-50%) translateY(8px);
             background: var(--bg-elevated);
             border: 1px solid var(--accent);
             color: var(--accent-2);
@@ -1043,11 +1151,12 @@
             font-family: 'JetBrains Mono', monospace;
             font-weight: 600;
             z-index: 1500;
-            display: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--t-med) var(--ease);
             box-shadow: var(--shadow-md);
         }
-        .g-indicator.show { display: block; animation: fadeIn 0.15s var(--ease); }
-        @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(4px); } to { opacity: 1; transform: translateX(-50%) none; } }
+        .g-indicator.show { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
 
         /* Reading mode */
         body.reading-mode .sidebar,
@@ -1073,8 +1182,12 @@
             display: flex;
             align-items: center;
             gap: 6px;
+            transition: all var(--t-fast) var(--ease);
+            opacity: 0;
+            animation: fadeIn 0.5s var(--ease) forwards 0.3s;
         }
-        body.reading-mode .reading-exit:hover { color: var(--text-primary); }
+        @keyframes fadeIn { to { opacity: 1; } }
+        body.reading-mode .reading-exit:hover { color: var(--text-primary); transform: translateY(-1px); }
         body:not(.reading-mode) .reading-exit { display: none; }
 
         /* Font size modifier */
@@ -1103,7 +1216,7 @@
                 color: var(--text-tertiary); cursor: pointer;
                 transition: all var(--t-fast) var(--ease);
             }
-            .sidebar-close:hover { color: var(--text-primary); }
+            .sidebar-close:hover { color: var(--text-primary); transform: rotate(90deg); }
             .sidebar-close svg { width: 15px; height: 15px; }
             .sidebar-logo { margin-bottom: 14px; }
 
@@ -1154,7 +1267,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                     </div>
                     <span class="sidebar-logo-text">Конспекты</span>
-                    <span class="sidebar-logo-version">v2.2</span>
+                    <span class="sidebar-logo-version">v2.3</span>
                     <button class="sidebar-close" onclick="closeSidebar()" aria-label="Закрыть меню">
                         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
                     </button>
@@ -1169,10 +1282,6 @@
                 <button class="filter-chip active" data-filter="all" onclick="setFilter('all')">
                     <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 3h8M3 6h6M4 9h4"/></svg>
                     Все
-                </button>
-                <button class="filter-chip" data-filter="profile" onclick="setFilter('profile')">
-                    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10 6l-4 4-3-3"/></svg>
-                    Профильные
                 </button>
                 <button class="filter-chip" data-filter="pinned" onclick="setFilter('pinned')">
                     <svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 1l1.5 3 3.5.5-2.5 2.5.5 3.5L6 9l-3 1.5.5-3.5L1 4.5l3.5-.5z"/></svg>
@@ -1286,7 +1395,12 @@
                 </button>
             </div>
             <div class="modal-body qr-modal-body">
-                <div class="qr-code" id="qrCodeContainer"></div>
+                <div class="qr-code" id="qrCodeContainer">
+                    <div class="qr-loader" id="qrLoader">
+                        <div class="qr-spinner"></div>
+                    </div>
+                    <img id="qrImage" alt="QR-код">
+                </div>
                 <div class="qr-url" id="qrUrlDisplay"></div>
                 <button class="qr-copy-btn" onclick="copyCurrentUrl()">Скопировать ссылку</button>
             </div>
@@ -1345,19 +1459,6 @@
         let pinnedPages = JSON.parse(localStorage.getItem('pinnedPages') || '[]');
         let pageCache = JSON.parse(localStorage.getItem('pageCache') || '{}');
         let readingMode = false;
-
-        /* Профильные предметы (кодим) */
-        const PROFILE_CATS = new Set([
-            'разработка', 'программирование', 'баз данных', 'технологии',
-            'проектирование', 'алгоритмизация', 'тестирование', 'сети',
-            'операционные системы', 'практика', 'web', 'веб', 'мобильных',
-            '.net', 'c#', 'c++', 'python', 'javascript', 'sql', 'asp.net',
-            'uml', 'паттерны', 'ado.net', 'html', 'css', 'ajax'
-        ]);
-        function isProfileCategory(title) {
-            const t = title.toLowerCase();
-            return Array.from(PROFILE_CATS).some(k => t.includes(k));
-        }
 
         const ICONS = {
             home: '<svg class="item-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8L8 3l5.5 5M4 7v6a1 1 0 001 1h2.5V10.5h1v3.5H11a1 1 0 001-1V7"/></svg>',
@@ -1523,8 +1624,16 @@
             return LANG_ALIASES[k] || '';
         }
 
-        /* ===== КОД-БЛОКИ: collapse, lines, wrap, search, open, download ===== */
+        /* ===== КОД-БЛОКИ ===== */
+        function renderCodeLines(raw, lang) {
+            const lines = raw.split('\n');
+            return lines.map((l, i) =>
+                '<span class="line-num">' + (i + 1) + '</span><span>' + highlightCode(l, lang) + '</span>'
+            ).join('\n');
+        }
+
         function enhanceCodeBlocks(root) {
+            // Таблицы → обёртка со скроллом
             root.querySelectorAll('table').forEach(t => {
                 if (t.parentElement && t.parentElement.classList.contains('table-wrap')) return;
                 const wrap = document.createElement('div');
@@ -1544,50 +1653,76 @@
                     header = null;
                 }
                 const lang = normalizeLang(headerLang) || detectLang(raw);
-                codeEl.innerHTML = highlightCode(raw, lang);
 
                 // Создаём wrapper
                 const wrapper = document.createElement('div');
                 wrapper.className = 'code-wrapper';
                 pre.parentNode.insertBefore(wrapper, pre);
-                wrapper.appendChild(pre);
 
                 // Заголовок
                 if (!header) {
                     header = document.createElement('div');
                     header.className = 'code-header';
-                    wrapper.insertBefore(header, pre);
+                    wrapper.appendChild(header);
+                } else {
+                    wrapper.appendChild(header);
                 }
+
+                // Поиск внутри кода (обёрнут в grid для анимации)
+                const searchWrap = document.createElement('div');
+                searchWrap.className = 'code-search-wrap';
+                searchWrap.innerHTML =
+                    '<div class="code-search-inner">' +
+                        '<input type="text" class="code-search-input" placeholder="Найти в коде...">' +
+                        '<span class="code-search-info"></span>' +
+                        '<button class="code-search-close">×</button>' +
+                    '</div>';
+                wrapper.appendChild(searchWrap);
+
+                // Обёртка для collapsible (grid-анимация)
+                const lineCount = (raw.match(/\n/g) || []).length + 1;
+                const isCollapsible = lineCount > 20;
+                let collapseWrap = null;
+                let collapseClip = null;
+
+                if (isCollapsible) {
+                    collapseWrap = document.createElement('div');
+                    collapseWrap.className = 'code-collapse-wrap collapsed';
+                    collapseClip = document.createElement('div');
+                    collapseClip.className = 'code-collapse-clip';
+                    collapseWrap.appendChild(collapseClip);
+                    wrapper.appendChild(collapseWrap);
+                    collapseClip.appendChild(pre);
+                } else {
+                    wrapper.appendChild(pre);
+                }
+
+                // Номера строк ПО УМОЛЧАНИЮ
+                pre.classList.add('with-lines');
+                codeEl.innerHTML = renderCodeLines(raw, lang);
+
+                // Заголовок: содержимое
                 header.innerHTML =
                     '<div class="code-header-left"><span class="code-lang">' + esc(LANG_LABELS[lang] || 'Код') + '</span></div>' +
                     '<div class="code-header-right">' +
                         '<button class="code-tool-btn" data-act="search" title="Поиск в коде"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="6" r="4"/><path d="M9 9l3 3"/></svg><span>Поиск</span></button>' +
-                        '<button class="code-tool-btn" data-act="lines" title="Номера строк"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 3h2M2 7h2M2 11h2M6 3h6M6 7h6M6 11h6"/></svg><span>№</span></button>' +
+                        '<button class="code-tool-btn active" data-act="lines" title="Номера строк"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 3h2M2 7h2M2 11h2M6 3h6M6 7h6M6 11h6"/></svg><span>№</span></button>' +
                         '<button class="code-tool-btn" data-act="wrap" title="Перенос строк"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 3h10M2 7h8c1 0 2 1 2 2s-1 2-2 2h-1M10 9l-2 2 2 2"/></svg><span>Wrap</span></button>' +
                         '<button class="code-tool-btn" data-act="open" title="Открыть в новой вкладке"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M6 2H3a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V8M8 2h4v4M12 2L6 8"/></svg><span>Открыть</span></button>' +
                         '<button class="code-tool-btn" data-act="download" title="Скачать файл"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M7 2v7M4 7l3 3 3-3M2 11v1h10v-1"/></svg><span>Скачать</span></button>' +
                         '<button class="code-tool-btn copy-btn" data-act="copy" title="Копировать">' + ICONS.copy + '<span>Копировать</span></button>' +
                     '</div>';
 
-                // Поиск внутри кода
-                const searchWrap = document.createElement('div');
-                searchWrap.className = 'code-search-wrap';
-                searchWrap.innerHTML =
-                    '<input type="text" class="code-search-input" placeholder="Найти в коде...">' +
-                    '<span class="code-search-info"></span>' +
-                    '<button class="code-search-close">×</button>';
-                wrapper.insertBefore(searchWrap, pre);
-
                 // Кнопка collapse для длинных блоков
-                const lineCount = (raw.match(/\n/g) || []).length + 1;
-                if (lineCount > 20) {
-                    wrapper.classList.add('collapsible', 'collapsed');
+                if (isCollapsible) {
+                    wrapper.classList.add('collapsible');
                     const colBtn = document.createElement('button');
                     colBtn.className = 'code-collapse-btn';
                     colBtn.textContent = 'Развернуть (' + lineCount + ' строк)';
                     colBtn.addEventListener('click', function() {
-                        wrapper.classList.toggle('collapsed');
-                        this.textContent = wrapper.classList.contains('collapsed') ? 'Развернуть (' + lineCount + ' строк)' : 'Свернуть';
+                        const isCollapsed = collapseWrap.classList.contains('collapsed');
+                        collapseWrap.classList.toggle('collapsed');
+                        this.textContent = isCollapsed ? 'Свернуть' : 'Развернуть (' + lineCount + ' строк)';
                     });
                     wrapper.appendChild(colBtn);
                 }
@@ -1598,37 +1733,31 @@
                         const act = btn.dataset.act;
                         if (act === 'copy') {
                             copyText(raw).then(() => {
-                                btn.classList.add('copied');
                                 btn.innerHTML = ICONS.check + '<span>Скопировано</span>';
+                                btn.classList.add('active');
                                 setTimeout(() => {
-                                    btn.classList.remove('copied');
                                     btn.innerHTML = ICONS.copy + '<span>Копировать</span>';
+                                    btn.classList.remove('active');
                                 }, 1800);
                             });
                         } else if (act === 'lines') {
-                            pre.classList.toggle('with-lines');
-                            btn.classList.toggle('active');
-                            if (pre.classList.contains('with-lines')) {
-                                const lines = raw.split('\n');
-                                codeEl.innerHTML = lines.map((l, i) =>
-                                    '<span class="line-num">' + (i + 1) + '</span><span>' + highlightCode(l, lang) + '</span>'
-                                ).join('\n');
-                            } else {
-                                codeEl.innerHTML = highlightCode(raw, lang);
-                            }
+                            const hasLines = pre.classList.toggle('with-lines');
+                            btn.classList.toggle('active', hasLines);
+                            codeEl.innerHTML = hasLines ? renderCodeLines(raw, lang) : highlightCode(raw, lang);
                         } else if (act === 'wrap') {
                             pre.classList.toggle('wrap');
                             btn.classList.toggle('active');
                         } else if (act === 'search') {
-                            searchWrap.classList.toggle('open');
-                            if (searchWrap.classList.contains('open')) {
-                                searchWrap.querySelector('input').focus();
+                            const isOpen = searchWrap.classList.toggle('open');
+                            btn.classList.toggle('active', isOpen);
+                            if (isOpen) {
+                                setTimeout(() => searchWrap.querySelector('input').focus(), 300);
                             } else {
                                 clearCodeSearch(pre, raw, lang);
+                                searchWrap.querySelector('input').value = '';
+                                searchWrap.querySelector('.code-search-info').textContent = '';
                             }
-                            btn.classList.toggle('active');
                         } else if (act === 'open') {
-                            const ext = {sql:'sql', csharp:'cs', js:'js', python:'py', html:'html', css:'css', json:'json'}[lang] || 'txt';
                             const w = window.open('', '_blank');
                             if (w) {
                                 w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Code</title><style>body{background:#0d0d10;color:#e2e8f0;font-family:monospace;padding:20px;white-space:pre;}</style></head><body>' + esc(raw) + '</body></html>');
@@ -1654,15 +1783,16 @@
                 const csClose = searchWrap.querySelector('.code-search-close');
                 csClose.addEventListener('click', () => {
                     searchWrap.classList.remove('open');
-                    clearCodeSearch(pre, raw, lang);
                     header.querySelector('[data-act="search"]').classList.remove('active');
+                    clearCodeSearch(pre, raw, lang);
+                    csInput.value = '';
+                    csInfo.textContent = '';
                 });
                 csInput.addEventListener('input', () => {
                     const q = csInput.value;
+                    const hasLines = pre.classList.contains('with-lines');
                     if (!q) {
-                        codeEl.innerHTML = pre.classList.contains('with-lines') ?
-                            raw.split('\n').map((l, i) => '<span class="line-num">' + (i + 1) + '</span><span>' + highlightCode(l, lang) + '</span>').join('\n') :
-                            highlightCode(raw, lang);
+                        codeEl.innerHTML = hasLines ? renderCodeLines(raw, lang) : highlightCode(raw, lang);
                         csInfo.textContent = '';
                         return;
                     }
@@ -1670,7 +1800,7 @@
                     const re = new RegExp('(' + qe + ')', 'gi');
                     const matches = (raw.match(re) || []).length;
                     const hl = t => t.replace(re, '<span class="code-search-match">$1</span>');
-                    if (pre.classList.contains('with-lines')) {
+                    if (hasLines) {
                         codeEl.innerHTML = raw.split('\n').map((l, i) =>
                             '<span class="line-num">' + (i + 1) + '</span><span>' + hl(highlightCode(l, lang)) + '</span>'
                         ).join('\n');
@@ -1684,9 +1814,7 @@
 
         function clearCodeSearch(pre, raw, lang) {
             const codeEl = pre.querySelector('code');
-            codeEl.innerHTML = pre.classList.contains('with-lines') ?
-                raw.split('\n').map((l, i) => '<span class="line-num">' + (i + 1) + '</span><span>' + highlightCode(l, lang) + '</span>').join('\n') :
-                highlightCode(raw, lang);
+            codeEl.innerHTML = pre.classList.contains('with-lines') ? renderCodeLines(raw, lang) : highlightCode(raw, lang);
         }
 
         /* ===== ЗАГОЛОВКИ: якорь-ссылка ===== */
@@ -1704,7 +1832,7 @@
                 a.textContent = '#';
                 a.addEventListener('click', (e) => {
                     e.preventDefault();
-                    const url = location.origin + location.pathname + '#' + h.id;
+                    const url = location.origin + location.pathname + location.search + '#' + h.id;
                     copyText(url).then(() => {
                         a.classList.add('copied');
                         a.textContent = '✓';
@@ -1730,7 +1858,8 @@
 
         function openLightbox(src) {
             const lb = document.getElementById('lightbox');
-            document.getElementById('lightboxImg').src = src;
+            const img = document.getElementById('lightboxImg');
+            img.src = src;
             lb.classList.add('active');
         }
         function closeLightbox() {
@@ -1751,10 +1880,11 @@
             }
             updateFilterUI();
             renderSidebar();
+            
             // Роутинг по URL
             const hash = location.hash.slice(1);
             const urlPage = new URLSearchParams(location.search).get('page');
-            const initialPage = urlPage || (hash && hash.indexOf('/') > -1 ? hash.split('/')[0] : '') || 'home';
+            const initialPage = urlPage || 'home';
             renderContent(initialPage);
 
             // Регистрация SW
@@ -1764,7 +1894,7 @@
         function registerServiceWorker() {
             if (!('serviceWorker' in navigator)) return;
             const swCode = `
-                const CACHE = 'konspekty-v2.2';
+                const CACHE = 'konspekty-v2.3';
                 self.addEventListener('install', e => {
                     self.skipWaiting();
                 });
@@ -1827,7 +1957,6 @@
             try {
                 localStorage.setItem('pageCache', JSON.stringify(pageCache));
             } catch (e) {
-                // Если localStorage переполнен, чистим старые
                 const keys = Object.keys(pageCache);
                 if (keys.length > 30) {
                     keys.sort((a, b) => (pageCache[a].ts || 0) - (pageCache[b].ts || 0));
@@ -1855,7 +1984,6 @@
             const collapsedMap = getCollapsed();
             let html = '';
 
-            // Закреплённые
             const pinnedItems = pinnedPages
                 .map(id => {
                     for (const cat of siteData.categories) {
@@ -1873,7 +2001,6 @@
                 });
             }
 
-            // Недавние
             const recentItems = recentPages
                 .filter(id => !pinnedPages.includes(id))
                 .slice(0, 5)
@@ -1901,11 +2028,8 @@
             siteData.categories.forEach((cat, ci) => {
                 const hasActive = cat.pages.some(p => p.id === currentPage);
                 const isCollapsed = !hasActive && !!collapsedMap[ci];
-                const isProfile = isProfileCategory(cat.title);
 
-                // Фильтр
                 let hidden = false;
-                if (currentFilter === 'profile' && !isProfile) hidden = true;
                 if (currentFilter === 'pinned' && !cat.pages.some(p => pinnedPages.includes(p.id))) hidden = true;
                 if (currentFilter === 'recent') {
                     const hasRecent = cat.pages.some(p => recentPages.includes(p.id));
@@ -1919,7 +2043,6 @@
                     '<div class="nav-category-items' + (isCollapsed ? ' collapsed' : '') + '"><div class="nav-cat-clip">';
 
                 cat.pages.forEach(page => {
-                    // Для фильтра recent/pinned внутри категории
                     if (currentFilter === 'pinned' && !pinnedPages.includes(page.id)) return;
                     if (currentFilter === 'recent' && !recentPages.includes(page.id)) return;
                     html += renderNavItem(page);
@@ -2086,10 +2209,9 @@
             contentArea.scrollTop = 0;
             updateToTop();
 
-            // Hash-навигация
             if (location.hash) {
                 const id = location.hash.slice(1);
-                setTimeout(() => scrollToSection(id), 100);
+                setTimeout(() => scrollToSection(id), 200);
             }
 
             renderSidebar();
@@ -2100,7 +2222,6 @@
             renderContent(pageId);
             closeSidebar();
             closePageSearch();
-            // Обновляем URL без перезагрузки
             const url = new URL(location.href);
             url.searchParams.set('page', pageId);
             history.replaceState(null, '', url.toString());
@@ -2156,25 +2277,43 @@
         function toggleBreadcrumbDropdown(e, catTitle) {
             e.stopPropagation();
             const bc = document.getElementById('breadcrumb');
+            const trigger = e.currentTarget;
             const existing = bc.querySelector('.breadcrumb-dropdown');
             if (existing) {
-                existing.remove();
+                existing.classList.remove('open');
+                trigger.classList.remove('open');
+                setTimeout(() => existing.remove(), 300);
                 return;
             }
             const cat = siteData.categories.find(c => c.title === catTitle);
             if (!cat) return;
             const dd = document.createElement('div');
-            dd.className = 'breadcrumb-dropdown open';
+            dd.className = 'breadcrumb-dropdown';
             dd.innerHTML = cat.pages.map(p =>
                 '<a onclick="navigateTo(\'' + p.id + '\');return false;" class="' + (p.id === currentPage ? 'current' : '') + '">' + esc(p.title) + '</a>'
             ).join('');
             bc.appendChild(dd);
+            trigger.classList.add('open');
+            // Trigger reflow then open
+            requestAnimationFrame(() => {
+                dd.classList.add('open');
+            });
         }
 
         function closeBreadcrumbDropdown() {
-            document.querySelectorAll('.breadcrumb-dropdown').forEach(d => d.remove());
+            const dropdowns = document.querySelectorAll('.breadcrumb-dropdown');
+            const triggers = document.querySelectorAll('.breadcrumb-item.has-dropdown.open');
+            dropdowns.forEach(d => {
+                d.classList.remove('open');
+                setTimeout(() => d.remove(), 300);
+            });
+            triggers.forEach(t => t.classList.remove('open'));
         }
-        document.addEventListener('click', closeBreadcrumbDropdown);
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.breadcrumb-item.has-dropdown') && !e.target.closest('.breadcrumb-dropdown')) {
+                closeBreadcrumbDropdown();
+            }
+        });
 
         /* ===== МОДАЛКИ ===== */
         function openModal(id) { document.getElementById(id).classList.add('active'); }
@@ -2183,9 +2322,27 @@
         function openQrModal() {
             const url = location.href;
             document.getElementById('qrUrlDisplay').textContent = url;
-            const container = document.getElementById('qrCodeContainer');
-            container.innerHTML = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(url) + '&bgcolor=ffffff&color=09090b" alt="QR">';
+            const loader = document.getElementById('qrLoader');
+            const img = document.getElementById('qrImage');
+            
+            // Сброс состояния
+            loader.classList.remove('hidden');
+            img.classList.remove('loaded');
+            img.src = '';
+            
             openModal('qrModal');
+            
+            // Загрузка с таймаутом
+            const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(url) + '&bgcolor=ffffff&color=09090b';
+            
+            img.onload = () => {
+                loader.classList.add('hidden');
+                img.classList.add('loaded');
+            };
+            img.onerror = () => {
+                loader.innerHTML = '<div style="color:#f87171;font-size:13px;font-weight:500;">Ошибка загрузки</div>';
+            };
+            img.src = qrUrl;
         }
 
         function openHelpModal() { openModal('helpModal'); }
@@ -2209,7 +2366,6 @@
             return searchIndex;
         }
 
-        /* Нечёткий поиск */
         function fuzzyScore(query, text) {
             const q = query.toLowerCase();
             const t = text.toLowerCase();
@@ -2218,8 +2374,8 @@
             for (let i = 0; i < t.length && qi < q.length; i++) {
                 if (t[i] === q[qi]) {
                     score += 10;
-                    if (last === i - 1) score += 5;     // последовательные бонус
-                    if (i === 0 || /\W/.test(t[i-1])) score += 8;  // начало слова
+                    if (last === i - 1) score += 5;
+                    if (i === 0 || /\W/.test(t[i-1])) score += 8;
                     last = i;
                     qi++;
                 }
@@ -2229,7 +2385,7 @@
 
         function openSearch() {
             document.getElementById('searchOverlay').classList.add('active');
-            setTimeout(() => document.getElementById('searchInput').focus(), 60);
+            setTimeout(() => document.getElementById('searchInput').focus(), 100);
             renderSearchResults('');
         }
         function closeSearch() {
@@ -2344,7 +2500,7 @@
             const input = document.getElementById('pageSearchInput');
             bar.classList.add('active');
             input.value = initialQuery;
-            setTimeout(() => input.focus(), 50);
+            setTimeout(() => input.focus(), 100);
             if (initialQuery) doPageSearch(initialQuery);
         }
         function closePageSearch() {
@@ -2459,7 +2615,6 @@
             const tag = (e.target.tagName || '').toLowerCase();
             const inInput = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
 
-            // Esc - последовательное закрытие
             if (e.key === 'Escape') {
                 if (document.getElementById('lightbox').classList.contains('active')) {
                     closeLightbox();
@@ -2481,20 +2636,13 @@
                 return;
             }
 
-            if (inInput) {
-                if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
-                    // пусть нативный Ctrl+F работает в инпутах
-                }
-                return;
-            }
+            if (inInput) return;
 
-            // Ctrl+F / Cmd+F - поиск на странице
             if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
                 e.preventDefault();
                 openPageSearch();
                 return;
             }
-            // Cmd+K / Ctrl+K - поиск
             if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
                 e.preventDefault();
                 openSearch();
@@ -2531,7 +2679,10 @@
         });
 
         /* ===== МОБИЛЬНЫЙ TOC ===== */
-        document.getElementById('mobileTocBtn').addEventListener('click', toggleMobileToc);
+        document.getElementById('mobileTocBtn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleMobileToc();
+        });
         function toggleMobileToc() {
             document.getElementById('mobileTocPanel').classList.toggle('open');
         }
@@ -2571,7 +2722,6 @@
         let scrollTick = false;
 
         function updateToTop() {
-            // Показываем после 2 экранов
             const threshold = window.innerHeight * 2;
             toTop.classList.toggle('show', contentArea.scrollTop > threshold);
         }
@@ -2595,7 +2745,6 @@
                     if (el && el.getBoundingClientRect().top - contentArea.getBoundingClientRect().top <= 90) active = link;
                 });
                 links.forEach(l => l.classList.toggle('active', l === active));
-                // Синхронизируем с мобильным
                 const mobileLinks = document.querySelectorAll('#mobileTocList a');
                 mobileLinks.forEach(l => {
                     const id = (l.getAttribute('href') || '').slice(1);
