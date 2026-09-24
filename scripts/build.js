@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * build.js — сборщик сайта конспектов.
- * Результат кладёт в папку dist/ (для GitHub Pages).
+ * Ищет template.html, вшивает данные и кладёт результат в dist/index.html
  */
 
 const fs = require('fs');
@@ -11,8 +11,8 @@ const { marked } = require('marked');
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 
-// Где искать исходники .md (проверяет по очереди)
-const CANDIDATE_DIRS = ['notes', 'content', 'md', 'docs', 'src', 'conspects', 'конспекты'];
+// Где искать исходники .md
+const CANDIDATE_DIRS = ['docs', 'notes', 'content', 'md', 'src', 'conspects'];
 
 // Что игнорировать при поиске
 const EXCLUDE_DIRS = new Set(['node_modules', '.git', '.github', '.vscode', '.idea', 'dist', 'build', 'out', 'scripts', 'public', 'vendor']);
@@ -35,14 +35,12 @@ const STUDENTS = [
 
 /* ================= УТИЛИТЫ ================= */
 
-/** "Я"/"я" (отдельным словом) → "Никита" */
 function replacePronouns(text) {
     const before = String.raw`(^|[\s\n\r.,!?;:—–\-"«»""''()\[\]{}<>/\\|@#%^&*+=~` + '`' + String.raw`])`;
     const after = String.raw`([\s\n\r.,!?;:—–\-"«»""''()\[\]{}<>/\\|@#%^&*+=~` + '`' + String.raw`]|$)`;
     return text.replace(new RegExp(before + '[Яя]' + after, 'g'), (m, b, a) => b + 'Никита' + a);
 }
 
-/** Список присутствующих из "> Присутствуют: ..." или "> Фамилия Имя, ..." */
 function extractAttendees(content) {
     const lines = content.split('\n');
     const out = [];
@@ -108,7 +106,7 @@ function findNotes() {
             if (files.length) return { dir, files };
         }
     }
-    // Фолбэк: весь репозиторий (кроме исключений)
+    // Фолбэк: весь репозиторий
     const files = collectMd(ROOT, ROOT);
     return files.length ? { dir: ROOT, files } : null;
 }
@@ -202,7 +200,6 @@ function processFile(file, usedIds) {
     return { id, title, category, date, content: html, toc, students };
 }
 
-/** Умный поиск студента (учитывает двух Поповых) */
 function matchStudent(name) {
     const nParts = name.toLowerCase().split(/\s+/).filter(Boolean);
     let best = null;
@@ -233,41 +230,33 @@ function buildAttendance(pages) {
 /* ================= СБОРКА В DIST ================= */
 
 function buildDist(siteData, attendanceData) {
-    // 1. Создаём папку dist
     if (!fs.existsSync(DIST)) fs.mkdirSync(DIST, { recursive: true });
 
-    // 2. Находим index.html в корне
-    const srcHtml = path.join(ROOT, 'index.html');
+    // Ищем template.html или index.html
+    let srcHtml = path.join(ROOT, 'template.html');
     if (!fs.existsSync(srcHtml)) {
-        console.error('❌ index.html не найден в корне репозитория!');
+        srcHtml = path.join(ROOT, 'index.html');
+    }
+
+    if (!fs.existsSync(srcHtml)) {
+        console.error('❌ Не найден ни template.html, ни index.html в корне!');
         process.exit(1);
     }
 
-    // 3. Читаем и вшиваем данные
     let html = fs.readFileSync(srcHtml, 'utf-8');
     
-    // Заменяем заглушки на реальные данные
+    // Вшиваем данные
     html = html.replace(/^([ \t]*)window\.siteData\s*=.*$/m, 
         (m, sp) => sp + 'window.siteData = ' + JSON.stringify(siteData) + ';');
     html = html.replace(/^([ \t]*)window\.attendanceData\s*=.*$/m, 
         (m, sp) => sp + 'window.attendanceData = ' + JSON.stringify(attendanceData) + ';');
 
-    // 4. Пишем в dist/index.html
+    // Пишем итоговый index.html в dist
     fs.writeFileSync(path.join(DIST, 'index.html'), html, 'utf-8');
 
-    // 5. Пишем JSON (на всякий случай, если сайт захочет их подгрузить отдельно)
+    // Дополнительно пишем JSON (на всякий случай)
     fs.writeFileSync(path.join(DIST, 'siteData.json'), JSON.stringify(siteData, null, 2), 'utf-8');
     fs.writeFileSync(path.join(DIST, 'attendance.json'), JSON.stringify(attendanceData, null, 2), 'utf-8');
-    
-    // 6. Копируем другие файлы из корня (если есть картинки, шрифты и т.д.)
-    // Пока копируем только явные ассеты, если они есть
-    const assetsToCopy = ['favicon.ico', 'manifest.json', 'sw.js'];
-    assetsToCopy.forEach(asset => {
-        const src = path.join(ROOT, asset);
-        if (fs.existsSync(src)) {
-            fs.copyFileSync(src, path.join(DIST, asset));
-        }
-    });
 }
 
 /* ================= MAIN ================= */
@@ -277,18 +266,18 @@ function main() {
 
     const found = findNotes();
     
-    // Если конспектов нет — создаём пустой dist с заглушками, чтобы сайт хотя бы открылся
     let pages = [];
     let siteData = { categories: [] };
     let attendanceData = { students: [], totalLessons: 0 };
 
     if (!found) {
         console.warn('⚠️  Markdown-конспекты не найдены.');
-        console.warn('   Проверены папки: ' + CANDIDATE_DIRS.join(', ') + ' и корень репозитория.');
-        console.warn('   Сайт будет собран пустым (без конспектов).');
+        console.warn('   Проверены папки: ' + CANDIDATE_DIRS.join(', ') + ' и корень.');
         
-        // Пытаемся сохранить старые данные, если они были вшиты в index.html
-        const srcHtml = path.join(ROOT, 'index.html');
+        // Пытаемся взять старые данные из шаблона
+        let srcHtml = path.join(ROOT, 'template.html');
+        if (!fs.existsSync(srcHtml)) srcHtml = path.join(ROOT, 'index.html');
+        
         if (fs.existsSync(srcHtml)) {
              const html = fs.readFileSync(srcHtml, 'utf-8');
              const m1 = html.match(/window\.siteData\s*=\s*({[\s\S]*?});/);
@@ -297,7 +286,7 @@ function main() {
              if (m2) try { attendanceData = JSON.parse(m2[1]); } catch(e){}
              
              if (siteData.categories.length > 0) {
-                 console.log('   ✅ Найдены старые данные в index.html, использую их.');
+                 console.log('   ✅ Найдены старые данные в шаблоне, использую их.');
              }
         }
     } else {
@@ -362,7 +351,7 @@ function main() {
 
     const top = [...attendanceData.students].sort((a, b) => b.attended - a.attended).slice(0, 3);
     if (top.length && attendanceData.totalLessons) {
-        console.log('\n🏆 Топ посещаемости:');
+        console.log('\n Топ посещаемости:');
         top.forEach((s, i) => {
             const pct = Math.round(s.attended / attendanceData.totalLessons * 100);
             console.log(`  ${i + 1}. ${s.name}: ${s.attended}/${attendanceData.totalLessons} (${pct}%)`);
