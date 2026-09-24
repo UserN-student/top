@@ -1,258 +1,425 @@
 const fs = require('fs');
 const path = require('path');
-const matter = require('gray-matter');
 const { marked } = require('marked');
 
-const DOCS_DIR = path.join(__dirname, '..', 'docs');
-const OUTPUT_DIR = path.join(__dirname, '..', 'dist');
+// ============ КОНФИГУРАЦИЯ ============
+const CONFIG = {
+    notesDir: path.join(__dirname, 'notes'),          // папка с конспектами
+    outputDir: __dirname,                               // куда писать JSON
+    siteDataFile: 'siteData.json',
+    attendanceFile: 'attendance.json',
+    
+    // Все студенты группы (захардкодь свой список)
+    allStudents: [
+        'Абрамов Андрей',
+        'Белов Данил',
+        'Васильев Кирилл',
+        'Громов Артём',
+        'Дмитриев Максим',
+        'Егоров Илья',
+        'Жуков Павел',
+        'Зайцев Роман',
+        'Иванов Сергей',
+        'Козлов Никита',
+        'Лебедев Денис',
+        'Левенцов Никита',
+        'Морозов Александр',
+        'Новиков Дмитрий',
+        'Орлов Владислав',
+        'Петров Михаил',
+        'Романов Егор',
+        'Смирнов Тимур',
+        'Тихонов Глеб',
+        'Ушаков Ярослав',
+        'Фёдоров Марк',
+        'Харитонов Матвей',
+        'Цветков Лев',
+        'Чернов Платон',
+        'Шевченко Даниил',
+    ],
+};
 
-// template.html может лежать в корне репозитория или рядом со скриптом
-let TEMPLATE_PATH = path.join(__dirname, '..', 'template.html');
-if (!fs.existsSync(TEMPLATE_PATH)) {
-    TEMPLATE_PATH = path.join(__dirname, 'template.html');
+// ============ УТИЛИТЫ ============
+
+/**
+ * Заменяет "Я"/"я" (standalone) на "Никита"
+ */
+function replacePronouns(text) {
+    const boundary = String.raw`(^|[\s\n\r.,!?;:—–\-"«»""''()\[\]{}<>/\\|@#%^&*+=~\`])`;
+    const boundaryAfter = String.raw`([\s\n\r.,!?;:—–\-"«»""''()\[\]{}<>/\\|@#%^&*+=~\`]|$)`;
+    const re = new RegExp(boundary + '[Яя]' + boundaryAfter, 'g');
+    return text.replace(re, (match, before, after) => before + 'Никита' + after);
 }
 
-if (!fs.existsSync(OUTPUT_DIR)) {
-    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-}
-
-const MONTHS_RU = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-                   'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
-
-// Хардкод списка группы (11 человек): короткое имя из конспекта -> ФИО
-const GROUP_ROSTER = [
-    { short: 'Никита', full: 'Левенцов Никита Сергеевич' },
-    { short: 'Дима',   full: 'Перов Дмитрий Павлович' },
-    { short: 'Андрей', full: 'Попов Андрей Сергеевич' },
-    { short: 'Саня П', full: 'Попов Александр Владимирович' },
-    { short: 'Сергей', full: 'Мисюрев Сергей Игоревич' },
-    { short: 'Саня К', full: 'Клеймёнов Александр Вячеславович' },
-    { short: 'Макар',  full: 'Воротников Макар Владимирович' },
-    { short: 'Иван',   full: 'Нефедов Иван Сергеевич' },
-    { short: 'Илья',   full: 'Климов Илья Владимирович' },
-    { short: 'Влад',   full: 'Хлупин Владислав Евгеньевич' },
-    { short: 'Антон',  full: 'Подугольников Антон Сергеевич' }
-];
-
-// JSON в ОДНУ строку + экранирование всего, что может сломать <script> в HTML
-function safeInlineJSON(obj) {
-    return JSON.stringify(obj)
-        .replace(/</g, '\\u003c')
-        .replace(/>/g, '\\u003e')
-        .replace(/\u2028/g, '\\u2028')
-        .replace(/\u2029/g, '\\u2029');
-}
-
-// Вставка через split/join — НЕ использует String.replace,
-// поэтому символы $&, $', $` внутри данных не ломают подстановку
-function inject(html, placeholder, value) {
-    if (!html.includes(placeholder)) {
-        console.error(`❌ Ошибка: плейсхолдер не найден в шаблоне: ${placeholder}`);
-        process.exit(1);
-    }
-    return html.split(placeholder).join(value);
-}
-
-function formatDateFromFilename(filename) {
-    const match = filename.match(/^(\d{2})\.(\d{2})\.(\d{4})\.md$/);
-    if (!match) return null;
-
-    const day = parseInt(match[1], 10);
-    const monthIdx = parseInt(match[2], 10) - 1;
-    const year = match[3];
-
-    if (monthIdx >= 0 && monthIdx < 12) {
-        return `${day} ${MONTHS_RU[monthIdx]} ${year}`;
-    }
-    return null;
-}
-
-function parseDateForSort(filename) {
-    const match = filename.match(/^(\d{2})\.(\d{2})\.(\d{4})\.md$/);
-    if (!match) return null;
-    const day = parseInt(match[1], 10);
-    const month = parseInt(match[2], 10) - 1;
-    const year = parseInt(match[3], 10);
-    return new Date(year, month, day);
-}
-
-function parseStudents(markdown) {
-    // Ищем строку "> Присутствуют: ..." или "> Присутствующие: ..."
-    const match = markdown.match(/^>\s*Присутств(?:уют|ующие):\s*(.+)$/mi);
-    if (!match) return [];
-
-    return match[1]
-        .split(',')
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
-}
-
-function readDocsDir(dir) {
-    const categories = [];
-
-    if (!fs.existsSync(dir)) {
-        return categories;
-    }
-
-    const items = fs.readdirSync(dir, { withFileTypes: true });
-
-    items.forEach(item => {
-        if (item.name.startsWith('.')) return;
-
-        const fullPath = path.join(dir, item.name);
-
-        if (item.isDirectory()) {
-            const category = {
-                id: item.name,
-                title: item.name.charAt(0).toUpperCase() + item.name.slice(1).replace(/-/g, ' '),
-                pages: []
-            };
-
-            const files = fs.readdirSync(fullPath).filter(f => f.endsWith('.md'));
-
-            // Сортируем по дате (имя файла в формате дд.мм.гггг)
-            files.sort((a, b) => {
-                const dateA = parseDateForSort(a);
-                const dateB = parseDateForSort(b);
-                if (dateA && dateB) {
-                    return dateA.getTime() - dateB.getTime();
-                }
-                return a.localeCompare(b);
-            });
-
-            files.forEach(file => {
-                const filePath = path.join(fullPath, file);
-                const content = fs.readFileSync(filePath, 'utf-8');
-                const { content: markdown } = matter(content);
-
-                // Название конспекта из первого H1
-                const titleMatch = markdown.match(/^#\s+(.+)$/m);
-                const title = titleMatch ? titleMatch[1].trim() : file.replace('.md', '');
-
-                // Дата из имени файла
-                const dateFormatted = formatDateFromFilename(file);
-
-                // Список присутствующих из строки "> Присутствуют: ..."
-                const students = parseStudents(markdown);
-
-                // Вырезаем строку с присутствующими и дублирующий H1
-                let cleanMarkdown = markdown;
-                cleanMarkdown = cleanMarkdown.replace(/^>\s*Присутств(?:уют|ующие):.*$/mi, '');
-                cleanMarkdown = cleanMarkdown.replace(/^#\s+.+$/m, '');
-                cleanMarkdown = cleanMarkdown.trim();
-
-                const htmlContent = marked(cleanMarkdown);
-
-                const toc = [];
-                const headingRegex = /^(#{2,3})\s+(.+)$/gm;
-                let match;
-
-                while ((match = headingRegex.exec(cleanMarkdown)) !== null) {
-                    const level = match[1].length;
-                    const text = match[2].trim();
-                    const id = text.toLowerCase()
-                        .replace(/[^\wа-яё\s-]/gi, '')
-                        .replace(/\s+/g, '-')
-                        .replace(/-+/g, '-');
-                    toc.push({ id, text, level });
-                }
-
-                category.pages.push({
-                    id: `${item.name}-${file.replace('.md', '')}`,
-                    title,
-                    date: dateFormatted,
-                    category: category.id,
-                    students,
-                    content: htmlContent,
-                    toc
+/**
+ * Извлекает список присутствующих из markdown-цитаты в начале файла.
+ * Ищет паттерн "> Присутствуют: ..." или "> ..." в первых строках.
+ */
+function extractAttendees(content) {
+    const lines = content.split('\n');
+    const attendees = [];
+    
+    for (let i = 0; i < Math.min(lines.length, 15); i++) {
+        const line = lines[i].trim();
+        
+        // Паттерн 1: "> Присутствуют: Иванов, Петров, Сидоров"
+        let match = line.match(/^>\s*Присутств(?:уют|ующие)?\s*:\s*(.+)$/i);
+        if (match) {
+            const names = match[1].split(/[,;]/).map(n => n.trim()).filter(Boolean);
+            attendees.push(...names);
+            continue;
+        }
+        
+        // Паттерн 2: просто "> Иванов, Петров" (если это первая цитата)
+        match = line.match(/^>\s*(.+)$/);
+        if (match && i < 5) {
+            const text = match[1].trim();
+            // Проверяем что это похоже на список ФИО (содержит запятые и пробелы)
+            if (text.includes(',') || text.split(/\s+/).length >= 3) {
+                const names = text.split(/[,;]/).map(n => n.trim()).filter(Boolean);
+                // Проверяем что имена выглядят как ФИО (минимум 2 слова с заглавной)
+                const validNames = names.filter(n => {
+                    const words = n.split(/\s+/);
+                    return words.length >= 2 && words.every(w => /^[А-ЯЁA-Z]/.test(w));
                 });
-            });
-
-            if (category.pages.length > 0) {
-                categories.push(category);
+                if (validNames.length >= 2) {
+                    attendees.push(...validNames);
+                }
             }
         }
-    });
-
-    return categories;
+    }
+    
+    return [...new Set(attendees)]; // убираем дубликаты
 }
 
-function buildAttendance(categories) {
-    const allPages = [];
-    categories.forEach(cat => cat.pages.forEach(p => allPages.push(p)));
-    const totalLessons = allPages.length;
+/**
+ * Извлекает заголовок H1 из markdown (если есть)
+ */
+function extractTitle(content) {
+    const match = content.match(/^#\s+(.+)$/m);
+    return match ? match[1].trim() : null;
+}
 
-    const students = GROUP_ROSTER.map(r => ({
-        name: r.full,
-        short: r.short,
-        attended: 0,
-        percent: 0,
-        missed: 0,
-        lessons: []
-    }));
+/**
+ * Извлекает дату из frontmatter или имени файла
+ */
+function extractDate(content, filename) {
+    // Из frontmatter: date: 2024-01-15
+    const fmMatch = content.match(/^---[\s\S]*?date:\s*(.+?)[\s\S]*?---/);
+    if (fmMatch) {
+        const d = new Date(fmMatch[1].trim());
+        if (!isNaN(d.getTime())) {
+            return d.toLocaleDateString('ru-RU');
+        }
+    }
+    
+    // Из имени файла: 2024-01-15-topic.md
+    const fileMatch = filename.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (fileMatch) {
+        const [, y, m, d] = fileMatch;
+        return `${d}.${m}.${y}`;
+    }
+    
+    // Из даты модификации файла
+    return '';
+}
 
-    allPages.forEach(page => {
-        (page.students || []).forEach(shortName => {
-            const key = shortName.toLowerCase();
-            let entry = students.find(s => s.short.toLowerCase() === key || s.name.toLowerCase() === key);
-            if (!entry) {
-                // Если в конспекте указано имя вне списка группы — добавляем динамически
-                entry = { name: shortName, short: shortName, attended: 0, percent: 0, missed: 0, lessons: [] };
-                students.push(entry);
+/**
+ * Парсит frontmatter (если есть)
+ */
+function parseFrontmatter(content) {
+    const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+    if (!match) return { meta: {}, content };
+    
+    const metaStr = match[1];
+    const body = match[2];
+    const meta = {};
+    
+    metaStr.split('\n').forEach(line => {
+        const m = line.match(/^(\w+):\s*(.+)$/);
+        if (m) meta[m[1]] = m[2].trim();
+    });
+    
+    return { meta, content: body };
+}
+
+/**
+ * Генерирует slug из строки
+ */
+function slugify(text) {
+    return text.toLowerCase()
+        .replace(/[^\wа-яё\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .slice(0, 60) || 'section';
+}
+
+/**
+ * Извлекает TOC из HTML (заголовки h2, h3)
+ */
+function extractToc(html) {
+    const toc = [];
+    const regex = /<(h[23])[^>]*>([^<]+)<\/\1>/gi;
+    let match;
+    
+    while ((match = regex.exec(html)) !== null) {
+        const level = parseInt(match[1][1]);
+        const text = match[2].trim();
+        const id = slugify(text);
+        toc.push({ level, text, id });
+    }
+    
+    return toc;
+}
+
+/**
+ * Добавляет id к заголовкам в HTML
+ */
+function addHeadingIds(html) {
+    return html.replace(/<(h[23])([^>]*)>([^<]+)<\/\1>/gi, (match, tag, attrs, text) => {
+        const id = slugify(text.trim());
+        return `<${tag}${attrs} id="${id}">${text}</${tag}>`;
+    });
+}
+
+// ============ ОБРАБОТКА ФАЙЛОВ ============
+
+/**
+ * Рекурсивно читает все .md файлы
+ */
+function walkDir(dir, baseDir = dir) {
+    const results = [];
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    
+    for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        
+        if (entry.isDirectory()) {
+            results.push(...walkDir(fullPath, baseDir));
+        } else if (entry.isFile() && entry.name.endsWith('.md')) {
+            const relativePath = path.relative(baseDir, fullPath);
+            results.push({
+                path: fullPath,
+                relativePath,
+                filename: entry.name,
+                dir: path.dirname(relativePath),
+            });
+        }
+    }
+    
+    return results;
+}
+
+/**
+ * Обрабатывает один markdown-файл
+ */
+function processFile(fileInfo) {
+    let raw = fs.readFileSync(fileInfo.path, 'utf-8');
+    
+    // Парсим frontmatter
+    const { meta, content: afterFm } = parseFrontmatter(raw);
+    
+    // Извлекаем присутствующих ДО замены местоимений
+    const attendees = extractAttendees(afterFm);
+    
+    // Заменяем "Я/я" на "Никита"
+    const processed = replacePronouns(afterFm);
+    
+    // Извлекаем заголовок
+    const title = meta.title || extractTitle(processed) || path.basename(fileInfo.filename, '.md').replace(/^\d{4}-\d{2}-\d{2}-/, '');
+    
+    // Дата
+    const date = meta.date || extractDate(raw, fileInfo.filename);
+    
+    // Категория (из папки или frontmatter)
+    const category = meta.category || fileInfo.dir.split(path.sep)[0] || 'Без категории';
+    
+    // Конвертируем в HTML
+    marked.setOptions({
+        gfm: true,
+        breaks: false,
+        headerIds: false,
+    });
+    
+    let html = marked.parse(processed);
+    
+    // Добавляем id к заголовкам
+    html = addHeadingIds(html);
+    
+    // Извлекаем TOC
+    const toc = extractToc(html);
+    
+    // Генерируем ID страницы
+    const pageId = slugify(category + ' ' + title);
+    
+    return {
+        id: pageId,
+        title,
+        category,
+        date,
+        content: html,
+        toc,
+        students: attendees,
+    };
+}
+
+// ============ СБОР СТАТИСТИКИ ============
+
+/**
+ * Подсчитывает посещаемость по всем конспектам
+ */
+function buildAttendanceData(pages, allStudents) {
+    const studentMap = {};
+    
+    // Инициализируем всех студентов
+    allStudents.forEach(name => {
+        studentMap[name] = 0;
+    });
+    
+    // Считаем посещения
+    pages.forEach(page => {
+        page.students.forEach(name => {
+            // Ищем студента в списке (нечёткий матчинг по фамилии)
+            const found = allStudents.find(s => {
+                const sParts = s.toLowerCase().split(/\s+/);
+                const nParts = name.toLowerCase().split(/\s+/);
+                // Совпадение если есть общая фамилия или имя
+                return sParts.some(p => nParts.includes(p)) || nParts.some(p => sParts.includes(p));
+            });
+            
+            if (found) {
+                studentMap[found]++;
+            } else {
+                // Студент не из списка — добавляем
+                if (!studentMap[name]) studentMap[name] = 0;
+                studentMap[name]++;
             }
-            entry.attended += 1;
-            entry.lessons.push({ date: page.date, title: page.title, category: page.category });
         });
     });
-
-    students.forEach(s => {
-        s.missed = Math.max(0, totalLessons - s.attended);
-        s.percent = totalLessons > 0 ? Math.round((s.attended / totalLessons) * 100) : 0;
-    });
-
-    return { totalLessons, students };
+    
+    // Преобразуем в массив и сортируем
+    const students = Object.entries(studentMap)
+        .map(([name, attended]) => ({ name, attended }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    
+    return {
+        students,
+        totalLessons: pages.length,
+    };
 }
+
+// ============ ГЛАВНАЯ ФУНКЦИЯ ============
 
 function build() {
-    console.log('🔨 Начинаю сборку сайта...');
-
-    const categories = readDocsDir(DOCS_DIR);
-
-    if (!fs.existsSync(TEMPLATE_PATH)) {
-        console.error('❌ Ошибка: template.html не найден!');
+    console.log('🔨 Начинаю сборку конспектов...\n');
+    
+    // Проверяем что папка notes существует
+    if (!fs.existsSync(CONFIG.notesDir)) {
+        console.error(`❌ Папка ${CONFIG.notesDir} не найдена!`);
+        console.log('Создай структуру:');
+        console.log('  notes/');
+        console.log('    Предмет 1/');
+        console.log('      2024-01-15-тема-1.md');
+        console.log('      2024-01-20-тема-2.md');
+        console.log('    Предмет 2/');
+        console.log('      2024-02-01-тема-1.md');
         process.exit(1);
     }
-
-    const template = fs.readFileSync(TEMPLATE_PATH, 'utf-8');
-
-    const attendanceObj = buildAttendance(categories);
-
-    // Для вставки в HTML — одна строка + экранирование
-    const siteDataJSON = safeInlineJSON({ categories });
-    const attendanceJSON = safeInlineJSON(attendanceObj);
-    // Для отдельного файла — красивый многострочный
-    const attendanceFileJSON = JSON.stringify(attendanceObj, null, 2);
-
-    // Вставка БЕЗ String.replace (split/join), чтобы $-символы в данных не ломали подстановку
-    let html = template;
-    html = inject(html, 'window.siteData = {"categories":[]};', `window.siteData = ${siteDataJSON};`);
-    html = inject(html, 'window.attendanceData = {"students":[],"totalLessons":0};', `window.attendanceData = ${attendanceJSON};`);
-
-    const outputPath = path.join(OUTPUT_DIR, 'index.html');
-    fs.writeFileSync(outputPath, html);
-
-    // Отдельный файл со статистикой (страница сначала пробует взять данные из него)
-    const attendancePath = path.join(OUTPUT_DIR, 'attendance.json');
-    fs.writeFileSync(attendancePath, attendanceFileJSON);
-
-    const totalPages = categories.reduce((sum, cat) => sum + cat.pages.length, 0);
-
-    console.log(`✅ Сайт собран!`);
-    console.log(`   Категорий: ${categories.length}`);
-    console.log(`   Страниц: ${totalPages}`);
-    console.log(`   Студентов в группе: ${attendanceObj.students.length}`);
-    console.log(`   Файл: ${outputPath}`);
-    console.log(`   Статистика: ${attendancePath}`);
+    
+    // Читаем все .md файлы
+    const files = walkDir(CONFIG.notesDir);
+    console.log(`📄 Найдено ${files.length} markdown-файлов\n`);
+    
+    if (files.length === 0) {
+        console.warn('⚠️  Нет файлов для обработки');
+        process.exit(0);
+    }
+    
+    // Обрабатываем каждый файл
+    const pages = [];
+    let errors = 0;
+    
+    files.forEach(file => {
+        try {
+            const page = processFile(file);
+            pages.push(page);
+            console.log(`✓ ${file.relativePath}`);
+            if (page.students.length > 0) {
+                console.log(`  └─ Присутствуют: ${page.students.length} чел.`);
+            }
+        } catch (err) {
+            console.error(`✗ ${file.relativePath}: ${err.message}`);
+            errors++;
+        }
+    });
+    
+    console.log(`\n✅ Обработано: ${pages.length}, ошибок: ${errors}\n`);
+    
+    // Группируем по категориям
+    const categoriesMap = {};
+    pages.forEach(page => {
+        if (!categoriesMap[page.category]) {
+            categoriesMap[page.category] = [];
+        }
+        categoriesMap[page.category].push(page);
+    });
+    
+    // Сортируем страницы внутри категорий по дате (новые сверху)
+    Object.values(categoriesMap).forEach(catPages => {
+        catPages.sort((a, b) => {
+            const da = a.date.split('.').reverse().join('');
+            const db = b.date.split('.').reverse().join('');
+            return db.localeCompare(da);
+        });
+    });
+    
+    // Формируем siteData
+    const siteData = {
+        categories: Object.entries(categoriesMap)
+            .sort(([a], [b]) => a.localeCompare(b, 'ru'))
+            .map(([title, catPages]) => ({
+                title,
+                pages: catPages.map(p => ({
+                    id: p.id,
+                    title: p.title,
+                    date: p.date,
+                    content: p.content,
+                    toc: p.toc,
+                    students: p.students,
+                })),
+            })),
+    };
+    
+    // Формируем attendanceData
+    const attendanceData = buildAttendanceData(pages, CONFIG.allStudents);
+    
+    // Пишем файлы
+    const siteDataPath = path.join(CONFIG.outputDir, CONFIG.siteDataFile);
+    const attendancePath = path.join(CONFIG.outputDir, CONFIG.attendanceFile);
+    
+    fs.writeFileSync(siteDataPath, JSON.stringify(siteData, null, 2), 'utf-8');
+    fs.writeFileSync(attendancePath, JSON.stringify(attendanceData, null, 2), 'utf-8');
+    
+    console.log('📦 Результаты:');
+    console.log(`  → ${CONFIG.siteDataFile} (${siteData.categories.length} категорий, ${pages.length} страниц)`);
+    console.log(`  → ${CONFIG.attendanceFile} (${attendanceData.students.length} студентов, ${attendanceData.totalLessons} занятий)`);
+    console.log('\n✨ Готово!\n');
+    
+    // Статистика
+    const topStudents = [...attendanceData.students]
+        .sort((a, b) => b.attended - a.attended)
+        .slice(0, 3);
+    
+    if (topStudents.length > 0) {
+        console.log('🏆 Топ посещаемости:');
+        topStudents.forEach((s, i) => {
+            const pct = attendanceData.totalLessons > 0 
+                ? Math.round(s.attended / attendanceData.totalLessons * 100) 
+                : 0;
+            console.log(`  ${i + 1}. ${s.name}: ${s.attended}/${attendanceData.totalLessons} (${pct}%)`);
+        });
+    }
 }
 
+// Запуск
 build();
