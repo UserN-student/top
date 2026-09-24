@@ -33,6 +33,28 @@ const STUDENTS = [
     'Воротников Макар Владимирович',
 ];
 
+/* ================= СЛОВАРЬ СОКРАЩЕНИЙ ================= */
+/**
+ * Словарь сокращений → полное имя.
+ * Ключи в нижнем регистре, без учёта регистра при поиске.
+ */
+const NICKNAMES = {
+    'я': 'Левенцов Никита Сергеевич',
+    'дима': 'Перов Дмитрий Павлович',
+    'саня к': 'Климов Илья Владимирович',
+    'саня п': 'Попов Андрей Сергеевич',
+    'илюха': 'Климов Илья Владимирович',
+    'никита': 'Левенцов Никита Сергеевич',
+    'серёга': 'Мисюрев Сергей Игоревич',
+    'андрей': 'Попов Андрей Сергеевич',
+    'саша к': 'Клеймёнов Александр Вячеславович',
+    'саша п': 'Попов Александр Владимирович',
+    'ваня': 'Нефедов Иван Сергеевич',
+    'антон': 'Подугольников Антон Сергеевич',
+    'влад': 'Хлупин Владислав Евгеньевич',
+    'макар': 'Воротников Макар Владимирович',
+};
+
 /* ================= УТИЛИТЫ ================= */
 
 function replacePronouns(text) {
@@ -200,15 +222,32 @@ function processFile(file, usedIds) {
     return { id, title, category, date, content: html, toc, students };
 }
 
+/**
+ * Ищет студента из списка по имени из конспекта.
+ * Сначала проверяет словарь сокращений, потом ищет по совпадению слов.
+ */
 function matchStudent(name) {
-    const nParts = name.toLowerCase().split(/\s+/).filter(Boolean);
+    const clean = name.trim().toLowerCase();
+    
+    // 1. Проверяем словарь сокращений
+    if (NICKNAMES[clean]) {
+        return NICKNAMES[clean];
+    }
+    
+    // 2. Пробуем найти по частичному совпадению (фамилия или имя)
+    const nParts = clean.split(/\s+/).filter(Boolean);
     let best = null;
     let bestScore = 0;
+    
     for (const s of STUDENTS) {
         const sParts = s.toLowerCase().split(/\s+/);
         const score = nParts.filter(p => sParts.includes(p)).length;
-        if (score > bestScore) { bestScore = score; best = s; }
+        if (score > bestScore) {
+            bestScore = score;
+            best = s;
+        }
     }
+    
     return bestScore >= 1 ? best : null;
 }
 
@@ -290,7 +329,7 @@ function main() {
              }
         }
     } else {
-        console.log(`📂 Папка с конспектами: ${path.relative(ROOT, found.dir) || '(корень)'}`);
+        console.log(` Папка с конспектами: ${path.relative(ROOT, found.dir) || '(корень)'}`);
         console.log(`📄 Найдено файлов: ${found.files.length}\n`);
 
         const usedIds = new Set();
@@ -351,7 +390,7 @@ function main() {
 
     const top = [...attendanceData.students].sort((a, b) => b.attended - a.attended).slice(0, 3);
     if (top.length && attendanceData.totalLessons) {
-        console.log('\n Топ посещаемости:');
+        console.log('\n🏆 Топ посещаемости:');
         top.forEach((s, i) => {
             const pct = Math.round(s.attended / attendanceData.totalLessons * 100);
             console.log(`  ${i + 1}. ${s.name}: ${s.attended}/${attendanceData.totalLessons} (${pct}%)`);
