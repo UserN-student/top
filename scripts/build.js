@@ -1,12 +1,7 @@
 #!/usr/bin/env node
 /**
  * build.js — сборщик сайта конспектов.
- * Не требует никакой структуры: сам находит .md файлы, сам определяет категории.
- * Категории (все варианты НЕОБЯЗАТЕЛЬНЫ, по порядку приоритета):
- *   1. frontmatter:  category: Базы данных
- *   2. подпапка:     notes/Базы данных/тема.md
- *   3. префикс имени: "Базы данных - тема.md"
- *   4. иначе:        "Конспекты"
+ * Результат кладёт в папку dist/ (для GitHub Pages).
  */
 
 const fs = require('fs');
@@ -14,13 +9,16 @@ const path = require('path');
 const { marked } = require('marked');
 
 const ROOT = path.resolve(__dirname, '..');
+const DIST = path.join(ROOT, 'dist');
 
+// Где искать исходники .md (проверяет по очереди)
 const CANDIDATE_DIRS = ['notes', 'content', 'md', 'docs', 'src', 'conspects', 'конспекты'];
 
+// Что игнорировать при поиске
 const EXCLUDE_DIRS = new Set(['node_modules', '.git', '.github', '.vscode', '.idea', 'dist', 'build', 'out', 'scripts', 'public', 'vendor']);
 const EXCLUDE_FILES = new Set(['readme.md', 'license.md', 'changelog.md', 'contributing.md', 'code_of_conduct.md', 'security.md', '_sidebar.md', '_footer.md', 'index.md']);
 
-/* Весь список группы — для статистики посещаемости */
+/* ================= СПИСОК ГРУППЫ 9/4-РПО-23/1 ================= */
 const STUDENTS = [
     'Левенцов Никита Сергеевич',
     'Мисюрев Сергей Игоревич',
@@ -44,7 +42,7 @@ function replacePronouns(text) {
     return text.replace(new RegExp(before + '[Яя]' + after, 'g'), (m, b, a) => b + 'Никита' + a);
 }
 
-/** Список присутствующих из "> Присутствуют: ..." или "> Фамилия Имя, ..." в начале файла */
+/** Список присутствующих из "> Присутствуют: ..." или "> Фамилия Имя, ..." */
 function extractAttendees(content) {
     const lines = content.split('\n');
     const out = [];
@@ -87,6 +85,7 @@ function slugify(text) {
 /* ================= ПОИСК ФАЙЛОВ ================= */
 
 function collectMd(dir, base, out = []) {
+    if (!fs.existsSync(dir)) return out;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         if (entry.isDirectory()) {
             if (EXCLUDE_DIRS.has(entry.name)) continue;
@@ -109,11 +108,12 @@ function findNotes() {
             if (files.length) return { dir, files };
         }
     }
-    const files = collectMd(ROOT, ROOT);   // фолбэк: весь репозиторий
+    // Фолбэк: весь репозиторий (кроме исключений)
+    const files = collectMd(ROOT, ROOT);
     return files.length ? { dir: ROOT, files } : null;
 }
 
-/* ================= МЕТАДАННЫЕ СТРАНИЦЫ ================= */
+/* ================= МЕТАДАННЫЕ ================= */
 
 function resolveCategory(meta, rel) {
     if (meta.category) return meta.category;
@@ -202,15 +202,24 @@ function processFile(file, usedIds) {
     return { id, title, category, date, content: html, toc, students };
 }
 
+/** Умный поиск студента (учитывает двух Поповых) */
+function matchStudent(name) {
+    const nParts = name.toLowerCase().split(/\s+/).filter(Boolean);
+    let best = null;
+    let bestScore = 0;
+    for (const s of STUDENTS) {
+        const sParts = s.toLowerCase().split(/\s+/);
+        const score = nParts.filter(p => sParts.includes(p)).length;
+        if (score > bestScore) { bestScore = score; best = s; }
+    }
+    return bestScore >= 1 ? best : null;
+}
+
 function buildAttendance(pages) {
     const map = new Map(STUDENTS.map(s => [s, 0]));
     pages.forEach(page => page.students.forEach(name => {
-        const nParts = name.toLowerCase().split(/\s+/);
-        const found = STUDENTS.find(s => {
-            const sParts = s.toLowerCase().split(/\s+/);
-            return sParts.some(p => nParts.includes(p));
-        });
-        const key = found || name;
+        const found = matchStudent(name);
+        const key = found || name.trim();
         map.set(key, (map.get(key) || 0) + 1);
     }));
     return {
@@ -221,26 +230,44 @@ function buildAttendance(pages) {
     };
 }
 
-/* ================= ВШИВАНИЕ ДАННЫХ В index.html ================= */
+/* ================= СБОРКА В DIST ================= */
 
-function patchIndexHtml(siteData, attendanceData) {
-    let file = path.join(ROOT, 'index.html');
-    if (!fs.existsSync(file)) {
-        const alt = fs.readdirSync(ROOT).find(f => f.toLowerCase().endsWith('.html'));
-        if (!alt) return null;
-        file = path.join(ROOT, alt);
+function buildDist(siteData, attendanceData) {
+    // 1. Создаём папку dist
+    if (!fs.existsSync(DIST)) fs.mkdirSync(DIST, { recursive: true });
+
+    // 2. Находим index.html в корне
+    const srcHtml = path.join(ROOT, 'index.html');
+    if (!fs.existsSync(srcHtml)) {
+        console.error('❌ index.html не найден в корне репозитория!');
+        process.exit(1);
     }
-    let html = fs.readFileSync(file, 'utf-8');
-    const orig = html;
-    html = html.replace(/^([ \t]*)window\.siteData\s*=.*$/m,
+
+    // 3. Читаем и вшиваем данные
+    let html = fs.readFileSync(srcHtml, 'utf-8');
+    
+    // Заменяем заглушки на реальные данные
+    html = html.replace(/^([ \t]*)window\.siteData\s*=.*$/m, 
         (m, sp) => sp + 'window.siteData = ' + JSON.stringify(siteData) + ';');
-    html = html.replace(/^([ \t]*)window\.attendanceData\s*=.*$/m,
+    html = html.replace(/^([ \t]*)window\.attendanceData\s*=.*$/m, 
         (m, sp) => sp + 'window.attendanceData = ' + JSON.stringify(attendanceData) + ';');
-    if (html !== orig) {
-        fs.writeFileSync(file, html, 'utf-8');
-        return path.relative(ROOT, file);
-    }
-    return null;
+
+    // 4. Пишем в dist/index.html
+    fs.writeFileSync(path.join(DIST, 'index.html'), html, 'utf-8');
+
+    // 5. Пишем JSON (на всякий случай, если сайт захочет их подгрузить отдельно)
+    fs.writeFileSync(path.join(DIST, 'siteData.json'), JSON.stringify(siteData, null, 2), 'utf-8');
+    fs.writeFileSync(path.join(DIST, 'attendance.json'), JSON.stringify(attendanceData, null, 2), 'utf-8');
+    
+    // 6. Копируем другие файлы из корня (если есть картинки, шрифты и т.д.)
+    // Пока копируем только явные ассеты, если они есть
+    const assetsToCopy = ['favicon.ico', 'manifest.json', 'sw.js'];
+    assetsToCopy.forEach(asset => {
+        const src = path.join(ROOT, asset);
+        if (fs.existsSync(src)) {
+            fs.copyFileSync(src, path.join(DIST, asset));
+        }
+    });
 }
 
 /* ================= MAIN ================= */
@@ -249,70 +276,89 @@ function main() {
     console.log('🔨 Начинаю сборку конспектов...\n');
 
     const found = findNotes();
+    
+    // Если конспектов нет — создаём пустой dist с заглушками, чтобы сайт хотя бы открылся
+    let pages = [];
+    let siteData = { categories: [] };
+    let attendanceData = { students: [], totalLessons: 0 };
+
     if (!found) {
         console.warn('⚠️  Markdown-конспекты не найдены.');
         console.warn('   Проверены папки: ' + CANDIDATE_DIRS.join(', ') + ' и корень репозитория.');
-        console.warn('   Ничего не меняю, оставляю существующие данные как есть.');
-        console.warn('   Чтобы добавить конспекты — просто положи .md файлы в папку notes/ в корне.');
-        console.log('\n✨ Сборка завершена (без изменений).\n');
-        return; // exit 0 — CI не падает
-    }
-
-    console.log(`📂 Папка с конспектами: ${path.relative(ROOT, found.dir) || '(корень репозитория)'}`);
-    console.log(`📄 Найдено файлов: ${found.files.length}\n`);
-
-    const usedIds = new Set();
-    const pages = [];
-    let errors = 0;
-
-    for (const file of found.files) {
-        try {
-            const page = processFile(file, usedIds);
-            pages.push(page);
-            const extra = page.students.length ? `  (присутствуют: ${page.students.length})` : '';
-            console.log(`  ✓ ${file.rel} → [${page.category}] ${page.title}${extra}`);
-        } catch (err) {
-            errors++;
-            console.error(`  ✗ ${file.rel}: ${err.message}`);
+        console.warn('   Сайт будет собран пустым (без конспектов).');
+        
+        // Пытаемся сохранить старые данные, если они были вшиты в index.html
+        const srcHtml = path.join(ROOT, 'index.html');
+        if (fs.existsSync(srcHtml)) {
+             const html = fs.readFileSync(srcHtml, 'utf-8');
+             const m1 = html.match(/window\.siteData\s*=\s*({[\s\S]*?});/);
+             const m2 = html.match(/window\.attendanceData\s*=\s*({[\s\S]*?});/);
+             if (m1) try { siteData = JSON.parse(m1[1]); } catch(e){}
+             if (m2) try { attendanceData = JSON.parse(m2[1]); } catch(e){}
+             
+             if (siteData.categories.length > 0) {
+                 console.log('   ✅ Найдены старые данные в index.html, использую их.');
+             }
         }
+    } else {
+        console.log(`📂 Папка с конспектами: ${path.relative(ROOT, found.dir) || '(корень)'}`);
+        console.log(`📄 Найдено файлов: ${found.files.length}\n`);
+
+        const usedIds = new Set();
+        let errors = 0;
+
+        for (const file of found.files) {
+            try {
+                const page = processFile(file, usedIds);
+                pages.push(page);
+                const extra = page.students.length ? `  (присутствуют: ${page.students.length})` : '';
+                console.log(`  ✓ ${file.rel} → [${page.category}] ${page.title}${extra}`);
+            } catch (err) {
+                errors++;
+                console.error(`  ✗ ${file.rel}: ${err.message}`);
+            }
+        }
+
+        console.log(`\n✅ Обработано: ${pages.length}, ошибок: ${errors}\n`);
+
+        // Группировка
+        const cats = new Map();
+        pages.forEach(p => {
+            if (!cats.has(p.category)) cats.set(p.category, []);
+            cats.get(p.category).push(p);
+        });
+        cats.forEach(list => list.sort((a, b) => {
+            const pa = a.date ? a.date.split('.').reverse().join('') : '0';
+            const pb = b.date ? b.date.split('.').reverse().join('') : '0';
+            return pb.localeCompare(pa);
+        }));
+
+        siteData = {
+            categories: [...cats.entries()]
+                .sort(([a], [b]) => a.localeCompare(b, 'ru'))
+                .map(([title, list]) => ({
+                    title,
+                    pages: list.map(p => ({
+                        id: p.id, title: p.title, date: p.date,
+                        content: p.content, toc: p.toc, students: p.students,
+                    })),
+                })),
+        };
+        attendanceData = buildAttendance(pages);
     }
 
-    console.log(`\n✅ Обработано: ${pages.length}, ошибок: ${errors}\n`);
+    // Собираем dist
+    try {
+        buildDist(siteData, attendanceData);
+    } catch (e) {
+        console.error('❌ Ошибка при создании dist:', e);
+        process.exit(1);
+    }
 
-    // Группировка по категориям + сортировка по дате (новые сверху)
-    const cats = new Map();
-    pages.forEach(p => {
-        if (!cats.has(p.category)) cats.set(p.category, []);
-        cats.get(p.category).push(p);
-    });
-    cats.forEach(list => list.sort((a, b) => {
-        const pa = a.date ? a.date.split('.').reverse().join('') : '0';
-        const pb = b.date ? b.date.split('.').reverse().join('') : '0';
-        return pb.localeCompare(pa);
-    }));
-
-    const siteData = {
-        categories: [...cats.entries()]
-            .sort(([a], [b]) => a.localeCompare(b, 'ru'))
-            .map(([title, list]) => ({
-                title,
-                pages: list.map(p => ({
-                    id: p.id, title: p.title, date: p.date,
-                    content: p.content, toc: p.toc, students: p.students,
-                })),
-            })),
-    };
-    const attendanceData = buildAttendance(pages);
-
-    fs.writeFileSync(path.join(ROOT, 'siteData.json'), JSON.stringify(siteData, null, 2), 'utf-8');
-    fs.writeFileSync(path.join(ROOT, 'attendance.json'), JSON.stringify(attendanceData, null, 2), 'utf-8');
-
-    const patched = patchIndexHtml(siteData, attendanceData);
-
-    console.log('📦 Результаты:');
-    console.log(`  → siteData.json     (${siteData.categories.length} катег., ${pages.length} стр.)`);
-    console.log(`  → attendance.json   (${attendanceData.students.length} студ., ${attendanceData.totalLessons} зан.)`);
-    console.log(patched ? `  → ${patched} (данные вшиты)` : '  → index.html не найден/не изменён (данные будут взяты из JSON)');
+    console.log('📦 Результаты в папке dist/:');
+    console.log(`  → index.html      (данные вшиты)`);
+    console.log(`  → siteData.json   (${siteData.categories.length} катег., ${pages.length} стр.)`);
+    console.log(`  → attendance.json (${attendanceData.students.length} студ., ${attendanceData.totalLessons} зан.)`);
 
     const top = [...attendanceData.students].sort((a, b) => b.attended - a.attended).slice(0, 3);
     if (top.length && attendanceData.totalLessons) {
@@ -322,7 +368,7 @@ function main() {
             console.log(`  ${i + 1}. ${s.name}: ${s.attended}/${attendanceData.totalLessons} (${pct}%)`);
         });
     }
-    console.log('\n✨ Готово!\n');
+    console.log('\n✨ Готово! Папка dist/ готова к деплою.\n');
 }
 
 main();
