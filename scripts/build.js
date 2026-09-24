@@ -1,425 +1,328 @@
+#!/usr/bin/env node
+/**
+ * build.js — сборщик сайта конспектов.
+ * Не требует никакой структуры: сам находит .md файлы, сам определяет категории.
+ * Категории (все варианты НЕОБЯЗАТЕЛЬНЫ, по порядку приоритета):
+ *   1. frontmatter:  category: Базы данных
+ *   2. подпапка:     notes/Базы данных/тема.md
+ *   3. префикс имени: "Базы данных - тема.md"
+ *   4. иначе:        "Конспекты"
+ */
+
 const fs = require('fs');
 const path = require('path');
 const { marked } = require('marked');
 
-// ============ КОНФИГУРАЦИЯ ============
-const CONFIG = {
-    notesDir: path.join(__dirname, 'notes'),          // папка с конспектами
-    outputDir: __dirname,                               // куда писать JSON
-    siteDataFile: 'siteData.json',
-    attendanceFile: 'attendance.json',
-    
-    // Все студенты группы (захардкодь свой список)
-    allStudents: [
-        'Абрамов Андрей',
-        'Белов Данил',
-        'Васильев Кирилл',
-        'Громов Артём',
-        'Дмитриев Максим',
-        'Егоров Илья',
-        'Жуков Павел',
-        'Зайцев Роман',
-        'Иванов Сергей',
-        'Козлов Никита',
-        'Лебедев Денис',
-        'Левенцов Никита',
-        'Морозов Александр',
-        'Новиков Дмитрий',
-        'Орлов Владислав',
-        'Петров Михаил',
-        'Романов Егор',
-        'Смирнов Тимур',
-        'Тихонов Глеб',
-        'Ушаков Ярослав',
-        'Фёдоров Марк',
-        'Харитонов Матвей',
-        'Цветков Лев',
-        'Чернов Платон',
-        'Шевченко Даниил',
-    ],
-};
+const ROOT = path.resolve(__dirname, '..');
 
-// ============ УТИЛИТЫ ============
+const CANDIDATE_DIRS = ['notes', 'content', 'md', 'docs', 'src', 'conspects', 'конспекты'];
 
-/**
- * Заменяет "Я"/"я" (standalone) на "Никита"
- */
+const EXCLUDE_DIRS = new Set(['node_modules', '.git', '.github', '.vscode', '.idea', 'dist', 'build', 'out', 'scripts', 'public', 'vendor']);
+const EXCLUDE_FILES = new Set(['readme.md', 'license.md', 'changelog.md', 'contributing.md', 'code_of_conduct.md', 'security.md', '_sidebar.md', '_footer.md', 'index.md']);
+
+/* Весь список группы — для статистики посещаемости */
+const STUDENTS = [
+    'Левенцов Никита Сергеевич',
+    'Мисюрев Сергей Игоревич',
+    'Попов Андрей Сергеевич',
+    'Перов Дмитрий Павлович',
+    'Клеймёнов Александр Вячеславович',
+    'Попов Александр Владимирович',
+    'Нефедов Иван Сергеевич',
+    'Климов Илья Владимирович',
+    'Подугольников Антон Сергеевич',
+    'Хлупин Владислав Евгеньевич',
+    'Воротников Макар Владимирович',
+];
+
+/* ================= УТИЛИТЫ ================= */
+
+/** "Я"/"я" (отдельным словом) → "Никита" */
 function replacePronouns(text) {
-    const boundary = String.raw`(^|[\s\n\r.,!?;:—–\-"«»""''()\[\]{}<>/\\|@#%^&*+=~\`])`;
-    const boundaryAfter = String.raw`([\s\n\r.,!?;:—–\-"«»""''()\[\]{}<>/\\|@#%^&*+=~\`]|$)`;
-    const re = new RegExp(boundary + '[Яя]' + boundaryAfter, 'g');
-    return text.replace(re, (match, before, after) => before + 'Никита' + after);
+    const before = String.raw`(^|[\s\n\r.,!?;:—–\-"«»""''()\[\]{}<>/\\|@#%^&*+=~` + '`' + String.raw`])`;
+    const after = String.raw`([\s\n\r.,!?;:—–\-"«»""''()\[\]{}<>/\\|@#%^&*+=~` + '`' + String.raw`]|$)`;
+    return text.replace(new RegExp(before + '[Яя]' + after, 'g'), (m, b, a) => b + 'Никита' + a);
 }
 
-/**
- * Извлекает список присутствующих из markdown-цитаты в начале файла.
- * Ищет паттерн "> Присутствуют: ..." или "> ..." в первых строках.
- */
+/** Список присутствующих из "> Присутствуют: ..." или "> Фамилия Имя, ..." в начале файла */
 function extractAttendees(content) {
     const lines = content.split('\n');
-    const attendees = [];
-    
+    const out = [];
     for (let i = 0; i < Math.min(lines.length, 15); i++) {
         const line = lines[i].trim();
-        
-        // Паттерн 1: "> Присутствуют: Иванов, Петров, Сидоров"
-        let match = line.match(/^>\s*Присутств(?:уют|ующие)?\s*:\s*(.+)$/i);
-        if (match) {
-            const names = match[1].split(/[,;]/).map(n => n.trim()).filter(Boolean);
-            attendees.push(...names);
+        let m = line.match(/^>\s*Присутств(?:уют|ующие)?\s*:\s*(.+)$/i);
+        if (m) {
+            out.push(...m[1].split(/[,;]/).map(s => s.trim()).filter(Boolean));
             continue;
         }
-        
-        // Паттерн 2: просто "> Иванов, Петров" (если это первая цитата)
-        match = line.match(/^>\s*(.+)$/);
-        if (match && i < 5) {
-            const text = match[1].trim();
-            // Проверяем что это похоже на список ФИО (содержит запятые и пробелы)
-            if (text.includes(',') || text.split(/\s+/).length >= 3) {
-                const names = text.split(/[,;]/).map(n => n.trim()).filter(Boolean);
-                // Проверяем что имена выглядят как ФИО (минимум 2 слова с заглавной)
-                const validNames = names.filter(n => {
-                    const words = n.split(/\s+/);
-                    return words.length >= 2 && words.every(w => /^[А-ЯЁA-Z]/.test(w));
-                });
-                if (validNames.length >= 2) {
-                    attendees.push(...validNames);
-                }
-            }
+        m = line.match(/^>\s*(.+)$/);
+        if (m && i < 5) {
+            const names = m[1].split(/[,;]/).map(s => s.trim()).filter(Boolean);
+            const valid = names.filter(n => n.split(/\s+/).length >= 2 && n.split(/\s+/).every(w => /^[А-ЯЁA-Z]/.test(w)));
+            if (valid.length >= 2) out.push(...valid);
         }
     }
-    
-    return [...new Set(attendees)]; // убираем дубликаты
+    return [...new Set(out)];
 }
 
-/**
- * Извлекает заголовок H1 из markdown (если есть)
- */
-function extractTitle(content) {
-    const match = content.match(/^#\s+(.+)$/m);
-    return match ? match[1].trim() : null;
-}
-
-/**
- * Извлекает дату из frontmatter или имени файла
- */
-function extractDate(content, filename) {
-    // Из frontmatter: date: 2024-01-15
-    const fmMatch = content.match(/^---[\s\S]*?date:\s*(.+?)[\s\S]*?---/);
-    if (fmMatch) {
-        const d = new Date(fmMatch[1].trim());
-        if (!isNaN(d.getTime())) {
-            return d.toLocaleDateString('ru-RU');
-        }
-    }
-    
-    // Из имени файла: 2024-01-15-topic.md
-    const fileMatch = filename.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (fileMatch) {
-        const [, y, m, d] = fileMatch;
-        return `${d}.${m}.${y}`;
-    }
-    
-    // Из даты модификации файла
-    return '';
-}
-
-/**
- * Парсит frontmatter (если есть)
- */
 function parseFrontmatter(content) {
-    const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-    if (!match) return { meta: {}, content };
-    
-    const metaStr = match[1];
-    const body = match[2];
+    const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+    if (!m) return { meta: {}, content };
     const meta = {};
-    
-    metaStr.split('\n').forEach(line => {
-        const m = line.match(/^(\w+):\s*(.+)$/);
-        if (m) meta[m[1]] = m[2].trim();
+    m[1].split('\n').forEach(line => {
+        const kv = line.match(/^([\w-]+):\s*(.+)$/);
+        if (kv) meta[kv[1].trim()] = kv[2].trim();
     });
-    
-    return { meta, content: body };
+    return { meta, content: m[2] };
 }
 
-/**
- * Генерирует slug из строки
- */
 function slugify(text) {
     return text.toLowerCase()
-        .replace(/[^\wа-яё\s-]/g, '')
+        .replace(/[^\wа-яё\s-]/gi, '')
         .replace(/\s+/g, '-')
         .replace(/-+/g, '-')
         .slice(0, 60) || 'section';
 }
 
-/**
- * Извлекает TOC из HTML (заголовки h2, h3)
- */
+/* ================= ПОИСК ФАЙЛОВ ================= */
+
+function collectMd(dir, base, out = []) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+            if (EXCLUDE_DIRS.has(entry.name)) continue;
+            collectMd(path.join(dir, entry.name), base, out);
+        } else if (entry.isFile()
+            && entry.name.toLowerCase().endsWith('.md')
+            && !EXCLUDE_FILES.has(entry.name.toLowerCase())) {
+            const abs = path.join(dir, entry.name);
+            out.push({ abs, rel: path.relative(base, abs) });
+        }
+    }
+    return out;
+}
+
+function findNotes() {
+    for (const cand of CANDIDATE_DIRS) {
+        const dir = path.join(ROOT, cand);
+        if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
+            const files = collectMd(dir, dir);
+            if (files.length) return { dir, files };
+        }
+    }
+    const files = collectMd(ROOT, ROOT);   // фолбэк: весь репозиторий
+    return files.length ? { dir: ROOT, files } : null;
+}
+
+/* ================= МЕТАДАННЫЕ СТРАНИЦЫ ================= */
+
+function resolveCategory(meta, rel) {
+    if (meta.category) return meta.category;
+    const relDir = path.dirname(rel);
+    if (relDir && relDir !== '.') return relDir.split(path.sep)[0];
+    const base = path.basename(rel, '.md');
+    const m = base.match(/^(.+?)\s*[-–—]\s*\S/);
+    if (m) {
+        const prefix = m[1].trim();
+        if (!/^\d{4}[-._]/.test(prefix) && !/^\d{1,2}\.\d{1,2}\.\d{4}/.test(prefix)) return prefix;
+    }
+    return 'Конспекты';
+}
+
+function resolveTitle(meta, content, rel, category) {
+    if (meta.title) return meta.title;
+    const h1 = content.match(/^#\s+(.+)$/m);
+    if (h1) return h1[1].trim();
+    let base = path.basename(rel, '.md');
+    base = base
+        .replace(/^\d{4}-\d{2}-\d{2}[-_]*/, '')
+        .replace(/^\d{1,2}\.\d{1,2}\.\d{4}[-_]*/, '')
+        .replace(new RegExp('^' + category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*[-–—]\\s*', 'i'), '');
+    base = base.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!base) return 'Без названия';
+    return base.charAt(0).toUpperCase() + base.slice(1);
+}
+
+function resolveDate(meta, content, rel) {
+    if (meta.date) {
+        const d = new Date(meta.date);
+        if (!isNaN(d.getTime())) return d.toLocaleDateString('ru-RU');
+    }
+    const base = path.basename(rel, '.md');
+    let m = base.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[3]}.${m[2]}.${m[1]}`;
+    m = base.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+    if (m) return `${m[1].padStart(2, '0')}.${m[2].padStart(2, '0')}.${m[3]}`;
+    m = content.match(/^>\s*(\d{1,2}\.\d{1,2}\.\d{4})/m);
+    if (m) return m[1];
+    return '';
+}
+
+function addHeadingIds(html) {
+    return html.replace(/<(h[23])([^>]*)>([^<]+)<\/\1>/gi, (m, tag, attrs, text) => {
+        if (/id=/.test(attrs)) return m;
+        return `<${tag}${attrs} id="${slugify(text.trim())}">${text}</${tag}>`;
+    });
+}
+
 function extractToc(html) {
     const toc = [];
-    const regex = /<(h[23])[^>]*>([^<]+)<\/\1>/gi;
-    let match;
-    
-    while ((match = regex.exec(html)) !== null) {
-        const level = parseInt(match[1][1]);
-        const text = match[2].trim();
-        const id = slugify(text);
-        toc.push({ level, text, id });
+    const re = /<(h[23])[^>]*>([^<]+)<\/\1>/gi;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+        toc.push({ level: parseInt(m[1][1], 10), text: m[2].trim(), id: slugify(m[2].trim()) });
     }
-    
     return toc;
 }
 
-/**
- * Добавляет id к заголовкам в HTML
- */
-function addHeadingIds(html) {
-    return html.replace(/<(h[23])([^>]*)>([^<]+)<\/\1>/gi, (match, tag, attrs, text) => {
-        const id = slugify(text.trim());
-        return `<${tag}${attrs} id="${id}">${text}</${tag}>`;
-    });
-}
+/* ================= ОБРАБОТКА ================= */
 
-// ============ ОБРАБОТКА ФАЙЛОВ ============
+function processFile(file, usedIds) {
+    const raw = fs.readFileSync(file.abs, 'utf-8');
+    const { meta, content: body } = parseFrontmatter(raw);
 
-/**
- * Рекурсивно читает все .md файлы
- */
-function walkDir(dir, baseDir = dir) {
-    const results = [];
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    
-    for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-        
-        if (entry.isDirectory()) {
-            results.push(...walkDir(fullPath, baseDir));
-        } else if (entry.isFile() && entry.name.endsWith('.md')) {
-            const relativePath = path.relative(baseDir, fullPath);
-            results.push({
-                path: fullPath,
-                relativePath,
-                filename: entry.name,
-                dir: path.dirname(relativePath),
-            });
-        }
-    }
-    
-    return results;
-}
+    const students = extractAttendees(body);
+    const processed = replacePronouns(body);
 
-/**
- * Обрабатывает один markdown-файл
- */
-function processFile(fileInfo) {
-    let raw = fs.readFileSync(fileInfo.path, 'utf-8');
-    
-    // Парсим frontmatter
-    const { meta, content: afterFm } = parseFrontmatter(raw);
-    
-    // Извлекаем присутствующих ДО замены местоимений
-    const attendees = extractAttendees(afterFm);
-    
-    // Заменяем "Я/я" на "Никита"
-    const processed = replacePronouns(afterFm);
-    
-    // Извлекаем заголовок
-    const title = meta.title || extractTitle(processed) || path.basename(fileInfo.filename, '.md').replace(/^\d{4}-\d{2}-\d{2}-/, '');
-    
-    // Дата
-    const date = meta.date || extractDate(raw, fileInfo.filename);
-    
-    // Категория (из папки или frontmatter)
-    const category = meta.category || fileInfo.dir.split(path.sep)[0] || 'Без категории';
-    
-    // Конвертируем в HTML
-    marked.setOptions({
-        gfm: true,
-        breaks: false,
-        headerIds: false,
-    });
-    
-    let html = marked.parse(processed);
-    
-    // Добавляем id к заголовкам
-    html = addHeadingIds(html);
-    
-    // Извлекаем TOC
+    const category = resolveCategory(meta, file.rel);
+    const title = resolveTitle(meta, processed, file.rel, category);
+    const date = resolveDate(meta, raw, file.rel);
+
+    marked.setOptions({ gfm: true, breaks: false });
+    let html = addHeadingIds(marked.parse(processed));
     const toc = extractToc(html);
-    
-    // Генерируем ID страницы
-    const pageId = slugify(category + ' ' + title);
-    
-    return {
-        id: pageId,
-        title,
-        category,
-        date,
-        content: html,
-        toc,
-        students: attendees,
-    };
+
+    let id = slugify(category + ' ' + title);
+    if (usedIds.has(id)) {
+        let n = 2;
+        while (usedIds.has(id + '-' + n)) n++;
+        id = id + '-' + n;
+    }
+    usedIds.add(id);
+
+    return { id, title, category, date, content: html, toc, students };
 }
 
-// ============ СБОР СТАТИСТИКИ ============
-
-/**
- * Подсчитывает посещаемость по всем конспектам
- */
-function buildAttendanceData(pages, allStudents) {
-    const studentMap = {};
-    
-    // Инициализируем всех студентов
-    allStudents.forEach(name => {
-        studentMap[name] = 0;
-    });
-    
-    // Считаем посещения
-    pages.forEach(page => {
-        page.students.forEach(name => {
-            // Ищем студента в списке (нечёткий матчинг по фамилии)
-            const found = allStudents.find(s => {
-                const sParts = s.toLowerCase().split(/\s+/);
-                const nParts = name.toLowerCase().split(/\s+/);
-                // Совпадение если есть общая фамилия или имя
-                return sParts.some(p => nParts.includes(p)) || nParts.some(p => sParts.includes(p));
-            });
-            
-            if (found) {
-                studentMap[found]++;
-            } else {
-                // Студент не из списка — добавляем
-                if (!studentMap[name]) studentMap[name] = 0;
-                studentMap[name]++;
-            }
+function buildAttendance(pages) {
+    const map = new Map(STUDENTS.map(s => [s, 0]));
+    pages.forEach(page => page.students.forEach(name => {
+        const nParts = name.toLowerCase().split(/\s+/);
+        const found = STUDENTS.find(s => {
+            const sParts = s.toLowerCase().split(/\s+/);
+            return sParts.some(p => nParts.includes(p));
         });
-    });
-    
-    // Преобразуем в массив и сортируем
-    const students = Object.entries(studentMap)
-        .map(([name, attended]) => ({ name, attended }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-    
+        const key = found || name;
+        map.set(key, (map.get(key) || 0) + 1);
+    }));
     return {
-        students,
+        students: [...map.entries()]
+            .map(([name, attended]) => ({ name, attended }))
+            .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
         totalLessons: pages.length,
     };
 }
 
-// ============ ГЛАВНАЯ ФУНКЦИЯ ============
+/* ================= ВШИВАНИЕ ДАННЫХ В index.html ================= */
 
-function build() {
+function patchIndexHtml(siteData, attendanceData) {
+    let file = path.join(ROOT, 'index.html');
+    if (!fs.existsSync(file)) {
+        const alt = fs.readdirSync(ROOT).find(f => f.toLowerCase().endsWith('.html'));
+        if (!alt) return null;
+        file = path.join(ROOT, alt);
+    }
+    let html = fs.readFileSync(file, 'utf-8');
+    const orig = html;
+    html = html.replace(/^([ \t]*)window\.siteData\s*=.*$/m,
+        (m, sp) => sp + 'window.siteData = ' + JSON.stringify(siteData) + ';');
+    html = html.replace(/^([ \t]*)window\.attendanceData\s*=.*$/m,
+        (m, sp) => sp + 'window.attendanceData = ' + JSON.stringify(attendanceData) + ';');
+    if (html !== orig) {
+        fs.writeFileSync(file, html, 'utf-8');
+        return path.relative(ROOT, file);
+    }
+    return null;
+}
+
+/* ================= MAIN ================= */
+
+function main() {
     console.log('🔨 Начинаю сборку конспектов...\n');
-    
-    // Проверяем что папка notes существует
-    if (!fs.existsSync(CONFIG.notesDir)) {
-        console.error(`❌ Папка ${CONFIG.notesDir} не найдена!`);
-        console.log('Создай структуру:');
-        console.log('  notes/');
-        console.log('    Предмет 1/');
-        console.log('      2024-01-15-тема-1.md');
-        console.log('      2024-01-20-тема-2.md');
-        console.log('    Предмет 2/');
-        console.log('      2024-02-01-тема-1.md');
-        process.exit(1);
+
+    const found = findNotes();
+    if (!found) {
+        console.warn('⚠️  Markdown-конспекты не найдены.');
+        console.warn('   Проверены папки: ' + CANDIDATE_DIRS.join(', ') + ' и корень репозитория.');
+        console.warn('   Ничего не меняю, оставляю существующие данные как есть.');
+        console.warn('   Чтобы добавить конспекты — просто положи .md файлы в папку notes/ в корне.');
+        console.log('\n✨ Сборка завершена (без изменений).\n');
+        return; // exit 0 — CI не падает
     }
-    
-    // Читаем все .md файлы
-    const files = walkDir(CONFIG.notesDir);
-    console.log(`📄 Найдено ${files.length} markdown-файлов\n`);
-    
-    if (files.length === 0) {
-        console.warn('⚠️  Нет файлов для обработки');
-        process.exit(0);
-    }
-    
-    // Обрабатываем каждый файл
+
+    console.log(`📂 Папка с конспектами: ${path.relative(ROOT, found.dir) || '(корень репозитория)'}`);
+    console.log(`📄 Найдено файлов: ${found.files.length}\n`);
+
+    const usedIds = new Set();
     const pages = [];
     let errors = 0;
-    
-    files.forEach(file => {
+
+    for (const file of found.files) {
         try {
-            const page = processFile(file);
+            const page = processFile(file, usedIds);
             pages.push(page);
-            console.log(`✓ ${file.relativePath}`);
-            if (page.students.length > 0) {
-                console.log(`  └─ Присутствуют: ${page.students.length} чел.`);
-            }
+            const extra = page.students.length ? `  (присутствуют: ${page.students.length})` : '';
+            console.log(`  ✓ ${file.rel} → [${page.category}] ${page.title}${extra}`);
         } catch (err) {
-            console.error(`✗ ${file.relativePath}: ${err.message}`);
             errors++;
+            console.error(`  ✗ ${file.rel}: ${err.message}`);
         }
-    });
-    
+    }
+
     console.log(`\n✅ Обработано: ${pages.length}, ошибок: ${errors}\n`);
-    
-    // Группируем по категориям
-    const categoriesMap = {};
-    pages.forEach(page => {
-        if (!categoriesMap[page.category]) {
-            categoriesMap[page.category] = [];
-        }
-        categoriesMap[page.category].push(page);
+
+    // Группировка по категориям + сортировка по дате (новые сверху)
+    const cats = new Map();
+    pages.forEach(p => {
+        if (!cats.has(p.category)) cats.set(p.category, []);
+        cats.get(p.category).push(p);
     });
-    
-    // Сортируем страницы внутри категорий по дате (новые сверху)
-    Object.values(categoriesMap).forEach(catPages => {
-        catPages.sort((a, b) => {
-            const da = a.date.split('.').reverse().join('');
-            const db = b.date.split('.').reverse().join('');
-            return db.localeCompare(da);
-        });
-    });
-    
-    // Формируем siteData
+    cats.forEach(list => list.sort((a, b) => {
+        const pa = a.date ? a.date.split('.').reverse().join('') : '0';
+        const pb = b.date ? b.date.split('.').reverse().join('') : '0';
+        return pb.localeCompare(pa);
+    }));
+
     const siteData = {
-        categories: Object.entries(categoriesMap)
+        categories: [...cats.entries()]
             .sort(([a], [b]) => a.localeCompare(b, 'ru'))
-            .map(([title, catPages]) => ({
+            .map(([title, list]) => ({
                 title,
-                pages: catPages.map(p => ({
-                    id: p.id,
-                    title: p.title,
-                    date: p.date,
-                    content: p.content,
-                    toc: p.toc,
-                    students: p.students,
+                pages: list.map(p => ({
+                    id: p.id, title: p.title, date: p.date,
+                    content: p.content, toc: p.toc, students: p.students,
                 })),
             })),
     };
-    
-    // Формируем attendanceData
-    const attendanceData = buildAttendanceData(pages, CONFIG.allStudents);
-    
-    // Пишем файлы
-    const siteDataPath = path.join(CONFIG.outputDir, CONFIG.siteDataFile);
-    const attendancePath = path.join(CONFIG.outputDir, CONFIG.attendanceFile);
-    
-    fs.writeFileSync(siteDataPath, JSON.stringify(siteData, null, 2), 'utf-8');
-    fs.writeFileSync(attendancePath, JSON.stringify(attendanceData, null, 2), 'utf-8');
-    
+    const attendanceData = buildAttendance(pages);
+
+    fs.writeFileSync(path.join(ROOT, 'siteData.json'), JSON.stringify(siteData, null, 2), 'utf-8');
+    fs.writeFileSync(path.join(ROOT, 'attendance.json'), JSON.stringify(attendanceData, null, 2), 'utf-8');
+
+    const patched = patchIndexHtml(siteData, attendanceData);
+
     console.log('📦 Результаты:');
-    console.log(`  → ${CONFIG.siteDataFile} (${siteData.categories.length} категорий, ${pages.length} страниц)`);
-    console.log(`  → ${CONFIG.attendanceFile} (${attendanceData.students.length} студентов, ${attendanceData.totalLessons} занятий)`);
-    console.log('\n✨ Готово!\n');
-    
-    // Статистика
-    const topStudents = [...attendanceData.students]
-        .sort((a, b) => b.attended - a.attended)
-        .slice(0, 3);
-    
-    if (topStudents.length > 0) {
-        console.log('🏆 Топ посещаемости:');
-        topStudents.forEach((s, i) => {
-            const pct = attendanceData.totalLessons > 0 
-                ? Math.round(s.attended / attendanceData.totalLessons * 100) 
-                : 0;
+    console.log(`  → siteData.json     (${siteData.categories.length} катег., ${pages.length} стр.)`);
+    console.log(`  → attendance.json   (${attendanceData.students.length} студ., ${attendanceData.totalLessons} зан.)`);
+    console.log(patched ? `  → ${patched} (данные вшиты)` : '  → index.html не найден/не изменён (данные будут взяты из JSON)');
+
+    const top = [...attendanceData.students].sort((a, b) => b.attended - a.attended).slice(0, 3);
+    if (top.length && attendanceData.totalLessons) {
+        console.log('\n🏆 Топ посещаемости:');
+        top.forEach((s, i) => {
+            const pct = Math.round(s.attended / attendanceData.totalLessons * 100);
             console.log(`  ${i + 1}. ${s.name}: ${s.attended}/${attendanceData.totalLessons} (${pct}%)`);
         });
     }
+    console.log('\n✨ Готово!\n');
 }
 
-// Запуск
-build();
+main();
