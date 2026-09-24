@@ -302,31 +302,43 @@
     </div>
 
     <script>
+        // ЭТИ ДВЕ СТРОКИ БУДУТ ЗАМЕНЕНЫ СКРИПТОМ СБОРКИ НА РЕАЛЬНЫЕ ДАННЫЕ
         window.siteData = {"categories":[]};
-        
-        let siteData = window.siteData || {};
-        let attendanceData = {};
+        window.attendanceData = {"students":[],"totalLessons":0};
+
+        const siteData = window.siteData || { categories: [] };
+        let attendanceData = { students: [], totalLessons: 0 };
         let currentPage = 'home';
         let sidebarOpen = false;
-        let totalLessons = 0;
 
         async function init() {
+            // Сначала пробуем взять статистику из отдельного файла attendance.json
             try {
                 const response = await fetch('attendance.json');
                 if (response.ok) {
-                    attendanceData = await response.json();
+                    const data = await response.json();
+                    if (data && Array.isArray(data.students)) {
+                        attendanceData = data;
+                    }
                 }
             } catch (e) {
-                console.warn('Не удалось загрузить attendance.json:', e);
+                console.warn('attendance.json не загрузился, использую встроенные данные:', e);
             }
 
-            totalLessons = 0;
-            siteData.categories.forEach(cat => {
-                totalLessons += cat.pages.length;
-            });
+            // Фолбэк: данные, встроенные прямо в index.html при сборке
+            if (!attendanceData.students || attendanceData.students.length === 0) {
+                if (window.attendanceData && Array.isArray(window.attendanceData.students)) {
+                    attendanceData = window.attendanceData;
+                }
+            }
 
             renderSidebar();
             renderContent('home');
+        }
+
+        function getTotalLessons() {
+            if (attendanceData.totalLessons > 0) return attendanceData.totalLessons;
+            return getAllPages().length;
         }
 
         function renderSidebar() {
@@ -358,6 +370,15 @@
                 html += `</div></div>`;
             });
             nav.innerHTML = html;
+        }
+
+        // Страховка: убираем из контента строку "Присутствуют: ..." и дублирующий H1,
+        // даже если они вдруг остались после сборки
+        function sanitizeContent(html) {
+            let out = html;
+            out = out.replace(/<p>\s*Присутств(?:уют|ующие):[^<]*<\/p>\s*/i, '');
+            out = out.replace(/^\s*<h1[^>]*>[\s\S]*?<\/h1>\s*/i, '');
+            return out;
         }
 
         function renderContent(pageId) {
@@ -396,18 +417,16 @@
                     <a href="#" class="breadcrumb-item" onclick="navigateTo('home'); return false;">Главная</a>
                     <svg class="breadcrumb-sep" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 3.5l3 3.5-3 3.5"/></svg>
                     <span class="breadcrumb-current">Счёт студентов</span>`;
-                
-                const studentKeys = Object.keys(attendanceData);
-                const studentCount = studentKeys.length;
 
-                let tableRows = '';
-                studentKeys.forEach((key, i) => {
-                    const student = attendanceData[key];
+                const totalLessons = getTotalLessons();
+                const students = attendanceData.students || [];
+
+                let tableRows = students.map((student, i) => {
                     const attended = student.attended || 0;
                     const percentage = totalLessons > 0 ? Math.round((attended / totalLessons) * 100) : 0;
                     const missed = totalLessons - attended;
-                    
-                    let status = '';
+
+                    let status;
                     if (totalLessons === 0) {
                         status = '<span style="color: var(--text-tertiary);">Нет занятий</span>';
                     } else if (percentage >= 80) {
@@ -420,18 +439,18 @@
                         status = '<span style="color: #d9534f;">Плохо</span>';
                     }
 
-                    tableRows += `
+                    return `
                         <tr>
                             <td>${i + 1}</td>
                             <td>${student.name}</td>
-                            <td>${percentage}%</td>
+                            <td>${percentage}% (${attended} из ${totalLessons})</td>
                             <td>${missed} занятий</td>
                             <td>${status}</td>
                         </tr>
                     `;
-                });
+                }).join('');
 
-                if (studentCount === 0) {
+                if (students.length === 0) {
                     tableRows = '<tr><td colspan="5" style="text-align: center; color: var(--text-tertiary);">Нет данных о посещаемости</td></tr>';
                 }
 
@@ -440,10 +459,10 @@
                         <h1>Счёт студентов</h1>
                         <div class="page-meta">
                             <span class="page-meta-item"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2" width="11" height="10" rx="1.5"/><path d="M1.5 5.5h11M4.5 1v2M9.5 1v2"/></svg> Статистика посещаемости</span>
-                            <span class="page-meta-item"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="5.5"/><path d="M7 4v3.5l2.5 1.5"/></svg> ${studentCount} студентов в группе</span>
+                            <span class="page-meta-item"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="5.5"/><path d="M7 4v3.5l2.5 1.5"/></svg> ${students.length} студентов в группе</span>
                             <span class="page-meta-item"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 3h10M2 7h10M2 11h6"/></svg> ${totalLessons} занятий всего</span>
                         </div>
-                        
+
                         <h2>Список группы</h2>
                         <table>
                             <thead>
@@ -464,7 +483,7 @@
                             <svg class="callout-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="8"/><path d="M10 6v4M10 14h.01"/></svg>
                             <div>
                                 <strong>Информация</strong>
-                                <p>Данные обновляются автоматически на основе поля "Присутствуют:" в каждом конспекте.</p>
+                                <p>Данные обновляются автоматически на основе строки "Присутствуют:" в каждом конспекте при сборке сайта.</p>
                             </div>
                         </div>
                     </div>`;
@@ -506,20 +525,22 @@
             }
             navHtml += '</div>';
 
+            const bodyHtml = sanitizeContent(foundPage.content);
+
             contentArea.innerHTML = `
                 <div class="content-inner fade-in">
                     <h1>${foundPage.title}</h1>
                     <div class="page-meta">
                         ${foundPage.date ? `<span class="page-meta-item"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2" width="11" height="10" rx="1.5"/><path d="M1.5 5.5h11M4.5 1v2M9.5 1v2"/></svg> ${foundPage.date}</span>` : ''}
-                        <span class="page-meta-item"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="5.5"/><path d="M7 4v3.5l2.5 1.5"/></svg> ~${Math.max(2, Math.floor(foundPage.content.length / 500))} мин чтения</span>
-                        ${foundPage.students && foundPage.students.length > 0 ? `<span class="page-meta-item"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M14 13v1a1 1 0 01-1 1H3a1 1 0 01-1-1v-1M12 5a4 4 0 11-8 0 4 4 0 018 0zM2 15s2-2 6-2 6 2 6 2"/></svg> ${foundPage.students.length} присутствующих</span>` : ''}
+                        <span class="page-meta-item"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="5.5"/><path d="M7 4v3.5l2.5 1.5"/></svg> ~${Math.max(1, Math.floor(bodyHtml.length / 500))} мин чтения</span>
+                        ${foundPage.students && foundPage.students.length > 0 ? `<span class="page-meta-item"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M13 12v1a1 1 0 01-1 1H2a1 1 0 01-1-1v-1M11 5a4 4 0 11-8 0 4 4 0 018 0zM1 14s2-2 5-2 5 2 5 2"/></svg> ${foundPage.students.length} присутствующих</span>` : ''}
                     </div>
-                    ${foundPage.content}
+                    ${bodyHtml}
                     ${navHtml}
                 </div>`;
 
             if (foundPage.toc && foundPage.toc.length > 0) {
-                tocList.innerHTML = foundPage.toc.map(item => 
+                tocList.innerHTML = foundPage.toc.map(item =>
                     `<li><a href="#${item.id}" class="${item.level === 3 ? 'toc-h3' : ''}" onclick="scrollToSection('${item.id}')">${item.text}</a></li>`
                 ).join('');
             } else {
