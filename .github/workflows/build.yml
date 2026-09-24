@@ -1,210 +1,50 @@
-const fs = require('fs');
-const path = require('path');
-const matter = require('gray-matter');
-const { marked } = require('marked');
+name: Build and Deploy
 
-const DOCS_DIR = path.join(__dirname, '..', 'docs');
-const OUTPUT_DIR = path.join(__dirname, '..', 'dist');
-const TEMPLATE_PATH = path.join(__dirname, '..', 'template.html');
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
-if (!fs.existsSync(OUTPUT_DIR)) {
-    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-}
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
-const MONTHS_RU = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 
-                   'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
-function formatDateFromFilename(filename) {
-    const match = filename.match(/^(\d{2})\.(\d{2})\.(\d{4})\.md$/);
-    if (!match) return null;
-    
-    const day = parseInt(match[1], 10);
-    const monthIdx = parseInt(match[2], 10) - 1;
-    const year = match[3];
-    
-    if (monthIdx >= 0 && monthIdx < 12) {
-        return `${day} ${MONTHS_RU[monthIdx]} ${year}`;
-    }
-    return null;
-}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-function parseStudents(markdown) {
-    // Ищем строку "> Присутствуют: ..." или "> Присутствующие: ..."
-    const match = markdown.match(/^>\s*Присутств(?:уют|ующие):\s*(.+)$/mi);
-    if (!match) return [];
-    
-    return match[1]
-        .split(',')
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
-}
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
-function readDocsDir(dir) {
-    const categories = [];
-    const attendance = {}; // Общий объект для сбора статистики
-    
-    if (!fs.existsSync(dir)) {
-        return { categories, attendance };
-    }
-    
-    const items = fs.readdirSync(dir, { withFileTypes: true });
-    
-    items.forEach(item => {
-        if (item.name.startsWith('.')) return;
-        
-        const fullPath = path.join(dir, item.name);
-        
-        if (item.isDirectory()) {
-            const category = {
-                id: item.name,
-                title: item.name.charAt(0).toUpperCase() + item.name.slice(1).replace(/-/g, ' '),
-                pages: []
-            };
-            
-            const files = fs.readdirSync(fullPath).filter(f => f.endsWith('.md'));
-            
-            // Сортируем по дате (имя файла в формате дд.мм.гггг)
-            files.sort((a, b) => {
-                const dateA = parseDateForSort(a);
-                const dateB = parseDateForSort(b);
-                if (dateA && dateB) {
-                    return dateA.getTime() - dateB.getTime();
-                }
-                return a.localeCompare(b);
-            });
-            
-            files.forEach(file => {
-                const filePath = path.join(fullPath, file);
-                const content = fs.readFileSync(filePath, 'utf-8');
-                const { data, content: markdown } = matter(content);
-                
-                // Извлекаем название из первого H1
-                const titleMatch = markdown.match(/^#\s+(.+)$/m);
-                const title = titleMatch ? titleMatch[1].trim() : file.replace('.md', '');
-                
-                // Извлекаем дату из имени файла
-                const dateFormatted = formatDateFromFilename(file);
-                
-                // Извлекаем список присутствующих
-                const students = parseStudents(markdown);
-                
-                // Убираем первую строку с присутствующими из markdown для рендера
-                let cleanMarkdown = markdown;
-                if (markdown.match(/^>\s*Присутств(?:уют|ующие):/mi)) {
-                    cleanMarkdown = markdown.replace(/^>\s*Присутств(?:уют|ующие):.*$/mi, '').trim();
-                }
-                
-                // Также убираем H1 заголовок, так как мы покажем его отдельно
-                if (titleMatch) {
-                    cleanMarkdown = cleanMarkdown.replace(/^#\s+.+$/m, '').trim();
-                }
-                
-                const htmlContent = marked(cleanMarkdown);
-                
-                const toc = [];
-                const headingRegex = /^(#{2,3})\s+(.+)$/gm;
-                let match;
-                
-                while ((match = headingRegex.exec(cleanMarkdown)) !== null) {
-                    const level = match[1].length;
-                    const text = match[2].trim();
-                    const id = text.toLowerCase()
-                        .replace(/[^\wа-яё\s-]/gi, '')
-                        .replace(/\s+/g, '-')
-                        .replace(/-+/g, '-');
-                    toc.push({ id, text, level });
-                }
-                
-                // Собираем статистику посещений
-                students.forEach(student => {
-                    const normalized = normalizeStudentName(student);
-                    if (!attendance[normalized]) {
-                        attendance[normalized] = {
-                            name: student, // Оригинальное имя
-                            attended: 0,
-                            dates: []
-                        };
-                    }
-                    attendance[normalized].attended += 1;
-                    if (dateFormatted) {
-                        attendance[normalized].dates.push({
-                            date: dateFormatted,
-                            title: title,
-                            category: category.id
-                        });
-                    }
-                });
-                
-                category.pages.push({
-                    id: `${item.name}-${file.replace('.md', '')}`,
-                    title,
-                    date: dateFormatted,
-                    category: category.id,
-                    students,
-                    content: htmlContent,
-                    toc
-                });
-            });
-            
-            if (category.pages.length > 0) {
-                categories.push(category);
-            }
-        }
-    });
-    
-    return { categories, attendance };
-}
+      - name: Install dependencies
+        run: npm install
 
-function parseDateForSort(filename) {
-    const match = filename.match(/^(\d{2})\.(\d{2})\.(\d{4})\.md$/);
-    if (!match) return null;
-    const day = parseInt(match[1], 10);
-    const month = parseInt(match[2], 10) - 1;
-    const year = parseInt(match[3], 10);
-    return new Date(year, month, day);
-}
+      - name: Build site
+        run: npm run build
 
-function normalizeStudentName(name) {
-    return name.toLowerCase().trim();
-}
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
 
-function build() {
-    console.log('🔨 Начинаю сборку сайта...');
-    
-    const { categories, attendance } = readDocsDir(DOCS_DIR);
-    
-    if (!fs.existsSync(TEMPLATE_PATH)) {
-        console.error('❌ Ошибка: template.html не найден!');
-        process.exit(1);
-    }
-    
-    const template = fs.readFileSync(TEMPLATE_PATH, 'utf-8');
-    
-    const siteDataObj = { categories };
-    const siteDataJSON = JSON.stringify(siteDataObj, null, 2);
-    
-    // Сохраняем данные о посещаемости в отдельный файл
-    const attendancePath = path.join(OUTPUT_DIR, 'attendance.json');
-    fs.writeFileSync(attendancePath, JSON.stringify(attendance, null, 2));
-    
-    // Заменяем плейсхолдер на реальные данные
-    let html = template.replace(
-        'window.siteData = {"categories":[]};',
-        `window.siteData = ${siteDataJSON};`
-    );
-    
-    const outputPath = path.join(OUTPUT_DIR, 'index.html');
-    fs.writeFileSync(outputPath, html);
-    
-    const totalPages = categories.reduce((sum, cat) => sum + cat.pages.length, 0);
-    const totalStudents = Object.keys(attendance).length;
-    
-    console.log(`✅ Сайт собран!`);
-    console.log(`   Категорий: ${categories.length}`);
-    console.log(`   Страниц: ${totalPages}`);
-    console.log(`   Студентов в статистике: ${totalStudents}`);
-    console.log(`   Файл: ${outputPath}`);
-    console.log(`   Статистика: ${attendancePath}`);
-}
-
-build();
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
