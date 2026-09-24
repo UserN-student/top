@@ -11,12 +11,18 @@ const { marked } = require('marked');
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 
-// Где искать исходники .md
-const CANDIDATE_DIRS = ['docs', 'notes', 'content', 'md', 'src', 'conspects'];
+// Где искать исходники .md (проверяет по очереди)
+const CANDIDATE_DIRS = ['docs', 'notes', 'content', 'md', 'src', 'conspects', 'конспекты'];
 
 // Что игнорировать при поиске
-const EXCLUDE_DIRS = new Set(['node_modules', '.git', '.github', '.vscode', '.idea', 'dist', 'build', 'out', 'scripts', 'public', 'vendor']);
-const EXCLUDE_FILES = new Set(['readme.md', 'license.md', 'changelog.md', 'contributing.md', 'code_of_conduct.md', 'security.md', '_sidebar.md', '_footer.md', 'index.md']);
+const EXCLUDE_DIRS = new Set([
+    'node_modules', '.git', '.github', '.vscode', '.idea',
+    'dist', 'build', 'out', 'scripts', 'public', 'vendor'
+]);
+const EXCLUDE_FILES = new Set([
+    'readme.md', 'license.md', 'changelog.md', 'contributing.md',
+    'code_of_conduct.md', 'security.md', '_sidebar.md', '_footer.md', 'index.md'
+]);
 
 /* ================= СПИСОК ГРУППЫ 9/4-РПО-23/1 ================= */
 const STUDENTS = [
@@ -35,34 +41,94 @@ const STUDENTS = [
 
 /* ================= СЛОВАРЬ СОКРАЩЕНИЙ ================= */
 /**
- * Словарь сокращений → полное имя.
- * Ключи в нижнем регистре, без учёта регистра при поиске.
+ * Ключ — сокращение/прозвище в нижнем регистре.
+ * Значение — полное ФИО из списка STUDENTS.
+ * У одного человека может быть много сокращений.
  */
 const NICKNAMES = {
+    // Левенцов Никита Сергеевич
     'я': 'Левенцов Никита Сергеевич',
-    'дима': 'Перов Дмитрий Павлович',
-    'саня к': 'Климов Илья Владимирович',
-    'саня п': 'Попов Андрей Сергеевич',
-    'илюха': 'Климов Илья Владимирович',
     'никита': 'Левенцов Никита Сергеевич',
+    'никитос': 'Левенцов Никита Сергеевич',
+    'ник': 'Левенцов Никита Сергеевич',
+    'левенцов': 'Левенцов Никита Сергеевич',
+
+    // Мисюрев Сергей Игоревич
     'серёга': 'Мисюрев Сергей Игоревич',
+    'сергей': 'Мисюрев Сергей Игоревич',
+    'серёж': 'Мисюрев Сергей Игоревич',
+    'мисюрев': 'Мисюрев Сергей Игоревич',
+
+    // Попов Андрей Сергеевич
     'андрей': 'Попов Андрей Сергеевич',
+    'андрюха': 'Попов Андрей Сергеевич',
+    'попов андрей': 'Попов Андрей Сергеевич',
+
+    // Перов Дмитрий Павлович
+    'дима': 'Перов Дмитрий Павлович',
+    'димон': 'Перов Дмитрий Павлович',
+    'дмитрий': 'Перов Дмитрий Павлович',
+    'перов': 'Перов Дмитрий Павлович',
+
+    // Клеймёнов Александр Вячеславович
     'саша к': 'Клеймёнов Александр Вячеславович',
+    'сашка к': 'Клеймёнов Александр Вячеславович',
+    'клеймёнов': 'Клеймёнов Александр Вячеславович',
+    'клейменов': 'Клеймёнов Александр Вячеславович',
+    'клём': 'Клеймёнов Александр Вячеславович',
+    'александр вячеславович': 'Клеймёнов Александр Вячеславович',
+
+    // Попов Александр Владимирович
     'саша п': 'Попов Александр Владимирович',
+    'сашка п': 'Попов Александр Владимирович',
+    'попов александр': 'Попов Александр Владимирович',
+    'александр владимирович': 'Попов Александр Владимирович',
+
+    // Нефедов Иван Сергеевич
     'ваня': 'Нефедов Иван Сергеевич',
+    'ванёк': 'Нефедов Иван Сергеевич',
+    'иван': 'Нефедов Иван Сергеевич',
+    'нефедов': 'Нефедов Иван Сергеевич',
+
+    // Климов Илья Владимирович
+    'илья': 'Климов Илья Владимирович',
+    'илюха': 'Климов Илья Владимирович',
+    'илюш': 'Климов Илья Владимирович',
+    'климов': 'Климов Илья Владимирович',
+
+    // Подугольников Антон Сергеевич
     'антон': 'Подугольников Антон Сергеевич',
+    'тоха': 'Подугольников Антон Сергеевич',
+    'толян': 'Подугольников Антон Сергеевич',
+    'подугольников': 'Подугольников Антон Сергеевич',
+
+    // Хлупин Владислав Евгеньевич
     'влад': 'Хлупин Владислав Евгеньевич',
+    'владос': 'Хлупин Владислав Евгеньевич',
+    'владислав': 'Хлупин Владислав Евгеньевич',
+    'хлупин': 'Хлупин Владислав Евгеньевич',
+
+    // Воротников Макар Владимирович
     'макар': 'Воротников Макар Владимирович',
+    'макарыч': 'Воротников Макар Владимирович',
+    'воротников': 'Воротников Макар Владимирович',
 };
 
 /* ================= УТИЛИТЫ ================= */
 
+/** "Я"/"я" (отдельным словом) → "Никита" (для текста конспекта) */
 function replacePronouns(text) {
     const before = String.raw`(^|[\s\n\r.,!?;:—–\-"«»""''()\[\]{}<>/\\|@#%^&*+=~` + '`' + String.raw`])`;
     const after = String.raw`([\s\n\r.,!?;:—–\-"«»""''()\[\]{}<>/\\|@#%^&*+=~` + '`' + String.raw`]|$)`;
     return text.replace(new RegExp(before + '[Яя]' + after, 'g'), (m, b, a) => b + 'Никита' + a);
 }
 
+/**
+ * Извлекает список присутствующих из цитаты в начале файла.
+ * Форматы:
+ *   > Присутствуют: Иванов, Петров, Я
+ *   > Иванов Иван, Петров Пётр, Я
+ */
 function extractAttendees(content) {
     const lines = content.split('\n');
     const out = [];
@@ -76,8 +142,15 @@ function extractAttendees(content) {
         m = line.match(/^>\s*(.+)$/);
         if (m && i < 5) {
             const names = m[1].split(/[,;]/).map(s => s.trim()).filter(Boolean);
-            const valid = names.filter(n => n.split(/\s+/).length >= 2 && n.split(/\s+/).every(w => /^[А-ЯЁA-Z]/.test(w)));
+            // Берём если похоже на список имён (есть запятые или ≥2 слов с заглавной)
+            const valid = names.filter(n => {
+                const words = n.split(/\s+/);
+                return words.length >= 2 && words.every(w => /^[А-ЯЁA-Z]/.test(w));
+            });
             if (valid.length >= 2) out.push(...valid);
+            // Также берём одиночные слова/сокращения типа "Я", "Дима", "Илюха"
+            const singles = names.filter(n => /^[А-ЯЁа-яёA-Za-z]+$/.test(n) && n.length >= 1);
+            if (singles.length >= 2 && valid.length === 0) out.push(...singles);
         }
     }
     return [...new Set(out)];
@@ -200,15 +273,20 @@ function processFile(file, usedIds) {
     const raw = fs.readFileSync(file.abs, 'utf-8');
     const { meta, content: body } = parseFrontmatter(raw);
 
+    // Извлекаем присутствующих ДО замены местоимений (чтобы "я" в списке тоже распозналось)
     const students = extractAttendees(body);
+
+    // Заменяем "Я/я" → "Никита" в основном тексте
     const processed = replacePronouns(body);
+    // Удаляем первый H1 чтобы не дублировался с тем, что вставит шаблон
+    const processedNoH1 = processed.replace(/^#\s+.+$/m, '').trim();
 
     const category = resolveCategory(meta, file.rel);
-    const title = resolveTitle(meta, processed, file.rel, category);
+    const title = resolveTitle(meta, processedNoH1, file.rel, category);
     const date = resolveDate(meta, raw, file.rel);
 
     marked.setOptions({ gfm: true, breaks: false });
-    let html = addHeadingIds(marked.parse(processed));
+    let html = addHeadingIds(marked.parse(processedNoH1));
     const toc = extractToc(html);
 
     let id = slugify(category + ' ' + title);
@@ -224,17 +302,18 @@ function processFile(file, usedIds) {
 
 /**
  * Ищет студента из списка по имени из конспекта.
- * Сначала проверяет словарь сокращений, потом ищет по совпадению слов.
+ * 1. Сначала проверяет словарь сокращений (точное совпадение).
+ * 2. Потом ищет по совпадению слов (фамилия/имя/отчество).
  */
 function matchStudent(name) {
     const clean = name.trim().toLowerCase();
     
-    // 1. Проверяем словарь сокращений
+    // 1. Точное совпадение в словаре сокращений
     if (NICKNAMES[clean]) {
         return NICKNAMES[clean];
     }
     
-    // 2. Пробуем найти по частичному совпадению (фамилия или имя)
+    // 2. Частичное совпадение по словам
     const nParts = clean.split(/\s+/).filter(Boolean);
     let best = null;
     let bestScore = 0;
@@ -255,7 +334,7 @@ function buildAttendance(pages) {
     const map = new Map(STUDENTS.map(s => [s, 0]));
     pages.forEach(page => page.students.forEach(name => {
         const found = matchStudent(name);
-        const key = found || name.trim();
+        const key = found || name.trim();   // кого нет в списке — пишем как есть
         map.set(key, (map.get(key) || 0) + 1);
     }));
     return {
