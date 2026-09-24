@@ -34,6 +34,25 @@ const GROUP_ROSTER = [
     { short: 'Антон',  full: 'Подугольников Антон Сергеевич' }
 ];
 
+// JSON в ОДНУ строку + экранирование всего, что может сломать <script> в HTML
+function safeInlineJSON(obj) {
+    return JSON.stringify(obj)
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+}
+
+// Вставка через split/join — НЕ использует String.replace,
+// поэтому символы $&, $', $` внутри данных не ломают подстановку
+function inject(html, placeholder, value) {
+    if (!html.includes(placeholder)) {
+        console.error(`❌ Ошибка: плейсхолдер не найден в шаблоне: ${placeholder}`);
+        process.exit(1);
+    }
+    return html.split(placeholder).join(value);
+}
+
 function formatDateFromFilename(filename) {
     const match = filename.match(/^(\d{2})\.(\d{2})\.(\d{4})\.md$/);
     if (!match) return null;
@@ -208,25 +227,23 @@ function build() {
 
     const attendanceObj = buildAttendance(categories);
 
-    const siteDataJSON = JSON.stringify({ categories }, null, 2);
-    const attendanceJSON = JSON.stringify(attendanceObj, null, 2);
+    // Для вставки в HTML — одна строка + экранирование
+    const siteDataJSON = safeInlineJSON({ categories });
+    const attendanceJSON = safeInlineJSON(attendanceObj);
+    // Для отдельного файла — красивый многострочный
+    const attendanceFileJSON = JSON.stringify(attendanceObj, null, 2);
 
-    // Заменяем плейсхолдеры на реальные данные
-    let html = template.replace(
-        'window.siteData = {"categories":[]};',
-        `window.siteData = ${siteDataJSON};`
-    );
-    html = html.replace(
-        'window.attendanceData = {"students":[],"totalLessons":0};',
-        `window.attendanceData = ${attendanceJSON};`
-    );
+    // Вставка БЕЗ String.replace (split/join), чтобы $-символы в данных не ломали подстановку
+    let html = template;
+    html = inject(html, 'window.siteData = {"categories":[]};', `window.siteData = ${siteDataJSON};`);
+    html = inject(html, 'window.attendanceData = {"students":[],"totalLessons":0};', `window.attendanceData = ${attendanceJSON};`);
 
     const outputPath = path.join(OUTPUT_DIR, 'index.html');
     fs.writeFileSync(outputPath, html);
 
     // Отдельный файл со статистикой (страница сначала пробует взять данные из него)
     const attendancePath = path.join(OUTPUT_DIR, 'attendance.json');
-    fs.writeFileSync(attendancePath, attendanceJSON);
+    fs.writeFileSync(attendancePath, attendanceFileJSON);
 
     const totalPages = categories.reduce((sum, cat) => sum + cat.pages.length, 0);
 
